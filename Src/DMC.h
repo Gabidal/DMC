@@ -19,6 +19,8 @@ public:
 
     // A 2D plane of words.
     vector<class Word> Buffer;
+    vector<class Word*> Sentence_Starters;
+    vector<class Word*> Sentence_Enders;
 
     int Width = 0;
 
@@ -53,6 +55,10 @@ public:
 class Weight{
 public:
     float Intensity = 0; //-1 to 1
+
+    Weight(){}
+
+    Weight(float Intensity) : Intensity(Intensity) {};
 };
 
 // Teller is a software that brings Djikstra's algorithm with Markov chain algorithm.
@@ -78,7 +84,11 @@ public:
 
     vector<pair<int, int>> Get_Surrounding(int x, int y);
 
-    void Diffuse_Around_Point_Of_Interest(int x, int y);
+    void Diffuse_Around_Point_Of_Interest(int x, int y, int parent_x, int parent_y);
+
+    void Print_Weights(string file_name);    
+
+    bool Djikstra(vector<Word*>& Result, Word* Current, Word* End);
 };
 
 
