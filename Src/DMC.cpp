@@ -16,17 +16,46 @@ Language::Language(string File_Name){
 
     string Line;
     while(getline(File, Line)){
-        Raw_Buffer += Line;
+        Raw_Buffer += Line + " ";
     }
     File.close();
+
+    Concat_Raw_Buffer();
+
+    Markov_Buffer();
+
+    // Now also get the sentence starters
+    if (Markov_Chain.size() > 0)
+        Sentence_Starters.push_back(Markov_Chain[0]);
+    
+    for (int i = 1; i < Markov_Chain.size(); i++){
+        Word* Previus_Word = Markov_Chain[i - 1];
+
+        if (Previus_Word->Data[Previus_Word->Data.size() - 1] == '.'){
+            Sentence_Starters.push_back(Markov_Chain[i]);
+
+            Sentence_Enders.push_back(Previus_Word);
+        }
+    }
+}
+
+Word* Language::Find(string w){
+    for (int i = 0; i < Markov_Chain.size(); i++){
+        if (Markov_Chain[i]->Data == w){
+            return Markov_Chain[i];
+        }
+    }
+    return nullptr;
 }
 
 void Language::Concat_Raw_Buffer(){
     string Current_Word = "";
 
     for (int i = 0; i < Raw_Buffer.size(); i++){
-        if (Raw_Buffer[i] == ' '){
-            Buffer.push_back( Word(Current_Word));
+        if (Raw_Buffer[i] == ' ' || Raw_Buffer[i] == ',' || Raw_Buffer[i] == ':' || Raw_Buffer[i] == '(' || Raw_Buffer[i] == ')'){
+            Cut_Buffer.push_back( Word(Current_Word));
+
+            Next_Word:;
             Current_Word = "";
         }
         else{
@@ -34,23 +63,7 @@ void Language::Concat_Raw_Buffer(){
         }
     }
     if (Current_Word != ""){
-        Buffer.push_back(Word(Current_Word));
-    }
-
-    Width = floor(sqrt(Buffer.size()));
-
-    // Now also get the sentence starters
-    if (Buffer.size() > 0)
-        Sentence_Starters.push_back(&Buffer[0]);
-    
-    for (int i = 1; i < Buffer.size(); i++){
-        Word* Previus_Word = &Buffer[i - 1];
-
-        if (Previus_Word->Data[Previus_Word->Data.size() - 1] == '.'){
-            Sentence_Starters.push_back(&Buffer[i]);
-
-            Sentence_Enders.push_back(Previus_Word);
-        }
+        Cut_Buffer.push_back(Word(Current_Word));
     }
 }
 
@@ -95,18 +108,64 @@ float Similiar(string a, char b){
 }
 
 void Language::Markov_Buffer(){
-    for (int i = 0; i < Buffer.size(); i++){
-        if (i + 1 >= Buffer.size())
+    for (int i = 0; i < Cut_Buffer.size(); i++){
+        if (i + 1 >= Cut_Buffer.size())
             break;
 
-        Buffer[i].Chain.push_back(&Buffer[i + 1]);
-    }
+        Word* current = nullptr;
+
+        //check if this word has already appearded.
+        for (int j = 0; j < Markov_Chain.size(); j++){
+            if (Markov_Chain[j]->Data == Cut_Buffer[i].Data){
+                current = Markov_Chain[j];
+                break;
+            }
+        }
+
+        if (current == nullptr){
+            Markov_Chain.push_back(new Word(Cut_Buffer[i].Data));
+            current = Markov_Chain.back();
+        }
+
+        if (current->Data == Cut_Buffer[i + 1].Data)
+            continue;
+
+        // Now check if the current has the next word already.
+        bool New = true;
+        for (int j = 0; j < current->Chain.size(); j++){
+            if (current->Chain[j]->Data == Cut_Buffer[i + 1].Data){
+                New = false;
+                break;
+            }
+        }
+
+        // If this is a new word, then first find it from the markov Cut_buffer,
+        // If it is not there already add it and then get a reference to it.
+        if (New){
+            Word* next = nullptr;
+            for (int j = 0; j < Markov_Chain.size(); j++){
+                if (Markov_Chain[j]->Data == Cut_Buffer[i + 1].Data){
+                    next = Markov_Chain[j];
+                    break;
+                }
+            }
+
+            if (next == nullptr){
+                Markov_Chain.push_back(new Word(Cut_Buffer[i + 1].Data));
+                next = Markov_Chain.back();
+            }
+
+            current->Chain.push_back(next);
+        }
+    }   
+
+    Width = floor(sqrt(Markov_Chain.size()));
 
     //now also give the words to know their own location to help out the path finding algorithm later on.
     for (int y = 0; y < Width; y++){
         for (int x = 0; x < Width; x++){
-            Buffer[y * Width + x].X = x;
-            Buffer[y * Width + x].Y = y;
+            Markov_Chain[y * Width + x]->X = x;
+            Markov_Chain[y * Width + x]->Y = y;
         }
     }
 
@@ -117,7 +176,11 @@ void Language::Output(string File_Name){
 
     for (int y = 0; y < Width; y++){
         for (int x = 0; x < Width; x++){
-            File << Buffer[y * Width + x].Data << " ";
+            File << "{" << Markov_Chain[y * Width + x]->Data << ", {";
+            for (auto& c : Markov_Chain[y * Width + x]->Chain){
+                File << c->Data << ", ";
+            }
+            File << "}}, \n";
         }
         File << endl;
     }
@@ -177,7 +240,7 @@ void Teller::Init_Weight(vector<pair<Weight,string>> weights){
     for (int y = 0; y < Speaks->Width; y++){
         for (int x = 0; x < Speaks->Width; x++){
             for (auto& w : weights){
-                if (w.second == Speaks->Buffer[y * Speaks->Width + x].Data){
+                if (w.second == Speaks->Markov_Chain[y * Speaks->Width + x]->Data){
                     Weights[y * Speaks->Width + x].Intensity = w.first.Intensity;
                     Points_Of_Interest.push_back({x, y});
                 }
@@ -218,19 +281,23 @@ int Choose(int Count){
     return rand() % Count;
 }
 
-const int Chunk_Size = 100;     // 100 Words in a single chunk.
-const float Word_Cost = 0.1f;   // How much a single word costs 
-int Current_Chunk_index = 0;
+const int Chunk_Size = 5;     // 100 Words in a single chunk.
+const float Word_Cost = 0.1f;   // How much a single word costs
 
-bool Teller::Djikstra(vector<Word*>& Result, Word* Current, Word* End){
+bool Teller::Djikstra(vector<Word*>& Result, Word* Current, Word* End, vector<Word*>& Trace){
     // If the current chunk has been already toppped, then return. 
     if (Result.size() + 1 >= Chunk_Size){
-        cout << Current_Chunk_index << endl;
         return false;
+    }
+
+    for (auto t : Trace){
+        if (t == Current)
+            return false;
     }
 
     // Add this current word to the Result.
     Result.push_back(Current);
+    Trace.push_back(Current);
 
     // If this is the lottery win then return true.
     if (Current == End)
@@ -244,8 +311,9 @@ bool Teller::Djikstra(vector<Word*>& Result, Word* Current, Word* End){
 
     for (auto& s_c : Current->Chain){
         vector<Word*> Chunk;
+        vector<Word*> tmp_Trace = Trace;
 
-        bool state = Djikstra(Chunk, s_c, End);
+        bool state = Djikstra(Chunk, s_c, End, tmp_Trace);
 
         Reached_To_The_End_Count += state;
         End_Reached_Index = Chunks.size();
@@ -306,8 +374,9 @@ bool Teller::Djikstra(vector<Word*>& Result, Word* Current, Word* End){
     // So we start another djikstra on the best candidate and hope for best.
     for (auto& c : Chunks){
         vector<Word*> tmp;
+        vector<Word*> tmp_Trace = Trace;
 
-        if (Djikstra(tmp, c.second[0], End)){
+        if (Djikstra(tmp, c.second[0], End, tmp_Trace)){
             Result.insert(Result.end(), tmp.begin(), tmp.end());
             return true;
         }
@@ -330,7 +399,9 @@ string Teller::Generate_Thought(){
     // were going to choose the chunk that ends to the nearest to the goal word.
 
     vector<Word*> Path;
-    Djikstra(Path, Start_Word, Goal_Word);
+    vector<Word*> Trace;
+
+    Djikstra(Path, Start_Word, Goal_Word, Trace);
 
     // Now we have the path, we can translate the path into string.
     for (auto& w : Path){
@@ -340,7 +411,31 @@ string Teller::Generate_Thought(){
     return Result;
 }
 
+string Teller::Generate_Thought(string start, string end){
+    string Result = "";
 
+    // First select a sentence starter.
+    Word* Start_Word = Speaks->Find(start);
+
+    // Then select the goal word.
+    Word* Goal_Word = Speaks->Find(end);
+
+    // First we are going to go through from the selected sentence starter,
+    // and go through towards the goal word, if we cant reach the goal word whitin the chunk.
+    // were going to choose the chunk that ends to the nearest to the goal word.
+
+    vector<Word*> Path;
+    vector<Word*> Trace;
+
+    Djikstra(Path, Start_Word, Goal_Word, Trace);
+
+    // Now we have the path, we can translate the path into string.
+    for (auto& w : Path){
+        Result += w->Data + " ";
+    }
+
+    return Result;
+}
 
 void Teller::Print_Weights(string file_name){
     ofstream File(file_name);

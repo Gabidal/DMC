@@ -18,9 +18,11 @@ public:
     string Raw_Buffer = "";
 
     // A 2D plane of words.
-    vector<class Word> Buffer;
+    vector<class Word> Cut_Buffer;
     vector<class Word*> Sentence_Starters;
     vector<class Word*> Sentence_Enders;
+
+    vector<class Word*> Markov_Chain;
 
     int Width = 0;
 
@@ -33,6 +35,8 @@ public:
     void Markov_Buffer();
 
     void Output(string File_Name);
+
+    class Word* Find(string w);
 };
 
 // A word contains the word id and the language id it references to.
@@ -82,13 +86,15 @@ public:
 
     string Generate_Thought();
 
+    string Generate_Thought(string start, string end);
+
     vector<pair<int, int>> Get_Surrounding(int x, int y);
 
     void Diffuse_Around_Point_Of_Interest(int x, int y, int parent_x, int parent_y);
 
     void Print_Weights(string file_name);    
 
-    bool Djikstra(vector<Word*>& Result, Word* Current, Word* End);
+    bool Djikstra(vector<Word*>& Result, Word* Current, Word* End, vector<Word*>& Trace);
 };
 
 
