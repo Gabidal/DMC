@@ -19,10 +19,8 @@ public:
 
     // A 2D plane of words.
     vector<class Word> Cut_Buffer;
-    vector<class Word*> Sentence_Starters;
-    vector<class Word*> Sentence_Enders;
 
-    vector<class Word*> Markov_Chain;
+    vector<class Word*> Markov_Buffer;
 
     int Width = 0;
 
@@ -32,11 +30,22 @@ public:
     // This function cuts the buffer into words divided with whitespace.
     void Concat_Raw_Buffer();
 
-    void Markov_Buffer();
+    void Apply_Markov_To_Buffer();
 
     void Output(string File_Name);
 
-    class Word* Find(string w);
+    class Word* Find(string w, int Start);
+
+    class Word* Find(int x, int y);
+
+    class Word* Get_Left(class Word* w);
+
+    class Word* Get_Right(class Word* w);
+
+    class Word* Get_Up(class Word* w);
+
+    class Word* Get_Down(class Word* w);
+
 };
 
 // A word contains the word id and the language id it references to.
@@ -45,6 +54,7 @@ public:
 class Word{
 public:
     string Data = "";
+
     int X = 0;
     int Y = 0;
 
@@ -52,6 +62,9 @@ public:
 
     Word(string Data) : Data(Data) {};
 
+    Word(char Data) {
+        this->Data = string(1, Data);
+    }
 
 };
 
@@ -88,13 +101,15 @@ public:
 
     string Generate_Thought(string start, string end);
 
+    string Generate_Thought(int count);
+
     vector<pair<int, int>> Get_Surrounding(int x, int y);
 
     void Diffuse_Around_Point_Of_Interest(int x, int y, int parent_x, int parent_y);
 
     void Print_Weights(string file_name);    
 
-    bool Djikstra(vector<Word*>& Result, Word* Current, Word* End, vector<Word*>& Trace);
+    bool Djikstra(vector<Word*>& Result, Word* Current, Word* End);
 };
 
 
