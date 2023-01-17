@@ -14,7 +14,7 @@ int main(){
     
     //cout << t.Generate_Thought(123) << endl;
 
-    t.Print_Gradient();
+    
 
     string await;
     cin >> await;

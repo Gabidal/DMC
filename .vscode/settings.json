@@ -74,6 +74,14 @@
         "xloctime": "cpp",
         "xmemory": "cpp",
         "xstddef": "cpp",
-        "xtr1common": "cpp"
+        "xtr1common": "cpp",
+        "*.tcc": "cpp",
+        "complex": "cpp",
+        "csetjmp": "cpp",
+        "csignal": "cpp",
+        "cuchar": "cpp",
+        "cwctype": "cpp",
+        "memory_resource": "cpp",
+        "variant": "cpp"
     }
 }

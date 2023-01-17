@@ -6,7 +6,7 @@
 
 #include <vector>
 #include <string>
-#include <map>
+#include <unordered_map>
 #include <bits/stdc++.h>
 
 using namespace std;
@@ -37,6 +37,8 @@ public:
 
     void Apply_Markov_To_Buffer();
 
+    void Finalize_Instance_Countters();
+
     void Output(string File_Name);
 
 
@@ -65,19 +67,28 @@ public:
     int X = 0;
     int Y = 0;
 
-    vector<Word*> Next_Chain;
-    vector<Word*> Previus_Chain;
-
-    // Count of all instances of this Word.
-    int Instances = 0;
-
-    vector<Word*> Get_Chain_In_Order(){
-        sort(Next_Chain.begin(), Next_Chain.end(), [=](Word* a, Word* b){
-            return a->Instances > b->Instances;
-        });
-    }
+    vector<pair<int, Word*>> Next_Chain;
+    vector<pair<int, Word*>> Previus_Chain;
 
     Word(string Data) : Data(Data) {};
+
+    pair<int, Word*>* Get_Next(string word){
+        for (auto& iter : Next_Chain){
+            if (iter.second->Data == word)
+                return &iter;
+        }
+
+        return nullptr;
+    }
+
+    pair<int, Word*>* Get_Prev(string word){
+        for (auto& iter : Previus_Chain){
+            if (iter.second->Data == word)
+                return &iter;
+        }
+
+        return nullptr;
+    }
 
     Word(char Data) {
         this->Data = string(1, Data);
@@ -151,6 +162,8 @@ public:
     // Makes a slow burning gradient around the points given.
     void Diffuse_Around_Point_Of_Interest(int x, int y, int parent_x, int parent_y);
     void Print_Weights(string file_name);    
+
+    // 
     bool Djikstra(vector<Word*>& Result, Word* Current, Word* End);
 };
 

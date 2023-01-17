@@ -220,28 +220,48 @@ void Language::Apply_Markov_To_Buffer(){
     
         }
 
-        bool Has_Been_Added_Already = false;
         Word* Previus = Fast_Markov[Cut_Buffer[i - 1].Data];
 
         if (Current->Data == Previus->Data){
             continue;
         }
 
-        for (auto w : Previus->Next_Chain){
-            if (w == Current){
-                Has_Been_Added_Already = true;
-                break;
-            }
+        if (Previus->Get_Next(Current->Data)){
+            Previus->Get_Next(Current->Data)->first++;
+        }
+        else{
+            Previus->Next_Chain.push_back({0, Current});
         }
 
-        if (!Has_Been_Added_Already){
-            Previus->Next_Chain.push_back(Current);
-            Current->Previus_Chain.push_back(Previus);
-
-            Previus->Instances++;
-            Current->Instances++;
+        if (Current->Get_Prev(Previus->Data)){
+            Current->Get_Prev(Previus->Data)->first++;
+        }
+        else{
+            Current->Previus_Chain.push_back({0, Previus});
         }
 
+    }
+
+    Finalize_Instance_Countters();
+}
+
+// Changes the countting to probabilistics.
+void Language::Finalize_Instance_Countters(){
+    for (auto& i : Fast_Markov){
+        int sum = 0;
+        for (auto& [count, next_word] : i.second->Next_Chain){
+            sum += count;
+        }
+        for (auto& [count, next_word] : i.second->Next_Chain){
+            count /= sum;
+        }
+        sum = 0;
+        for (auto& [count, prev_word] : i.second->Previus_Chain){
+            sum += count;
+        }
+        for (auto& [count, prev_word] : i.second->Previus_Chain){
+            count /= sum;
+        }
     }
 }
 
@@ -272,11 +292,6 @@ void Teller::Apply_Gradient_To_Markov(){
     for (int i = 0; i < Speaks->Cut_Buffer.size(); i++){
         Ordered_Instances.push_back(i);
     }
-
-    // Sort the list using the lambda function.
-    sort(Ordered_Instances.begin(), Ordered_Instances.end(), [&](int a, int b){
-        return Speaks->Cut_Buffer[a].Instances > Speaks->Cut_Buffer[b].Instances;
-    });
 
 
     for (int i = 0; i < Max_Distance; i++){
@@ -350,7 +365,7 @@ void Language::Output(string File_Name){
     for (auto w : Fast_Markov){
         File << w.first << ": {";
         for (auto c : w.second->Next_Chain){
-            File << c->Data << ", ";
+            File << c.second->Data << ", ";
         }
         File << "}" << endl;
     }
@@ -461,16 +476,16 @@ bool Reach(Word* Start, Word* End, int Current_Reach, float Previus_Distance, ve
     Word* Current = Start;
 
     for (auto c : Current->Next_Chain){
-        float Current_Distance = sqrt(pow(c->X - End->X, 2) + pow(c->Y - End->Y, 2));
+        float Current_Distance = sqrt(pow(c.second->X - End->X, 2) + pow(c.second->Y - End->Y, 2));
 
         if (Current_Distance >= Previus_Distance){
-            bool r = Reach(c, End, Current_Reach - 1, Current_Distance, Path);
+            bool r = Reach(c.second, End, Current_Reach - 1, Current_Distance, Path);
 
             if (r)
                 goto GOOD_PATH;
         }
         else{
-            Current = c;
+            Current = c.second;
             goto GOOD_PATH;
         }
     }
