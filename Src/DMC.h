@@ -6,6 +6,8 @@
 
 #include <vector>
 #include <string>
+#include <map>
+#include <bits/stdc++.h>
 
 using namespace std;
 
@@ -17,14 +19,17 @@ public:
     //This buffer contains the raw data that just got scooped from the given text file. 
     string Raw_Buffer = "";
 
-    // A 2D plane of words.
+    // The raw buffer of words.
     vector<class Word> Cut_Buffer;
 
-    vector<class Word*> Markov_Buffer;
+    // The Markov chain buffer, but made in map for improved performance.
+    map<string, class Word*> Fast_Markov;
 
+    // Width and height dimensions. X^2
     int Width = 0;
 
-    //Loads the 
+    //Loads the file contenct to the cut buffer.
+    // And applies the markov chain to it.
     Language(string File_Name);
 
     // This function cuts the buffer into words divided with whitespace.
@@ -34,16 +39,18 @@ public:
 
     void Output(string File_Name);
 
-    class Word* Find(string w, int Start);
 
+
+    // Utils
+    //-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_
+    // Given cut buffers word returns markov chain index.
+    class Word* Find(string w, int Start);
+    // Given cut buffers coordinates returns markov chain index.
     class Word* Find(int x, int y);
 
     class Word* Get_Left(class Word* w);
-
     class Word* Get_Right(class Word* w);
-
     class Word* Get_Up(class Word* w);
-
     class Word* Get_Down(class Word* w);
 
 };
@@ -58,16 +65,34 @@ public:
     int X = 0;
     int Y = 0;
 
-    vector<Word*> Chain;
+    vector<Word*> Next_Chain;
+    vector<Word*> Previus_Chain;
+
+    // Count of all instances of this Word.
+    int Instances = 0;
+
+    vector<Word*> Get_Chain_In_Order(){
+        sort(Next_Chain.begin(), Next_Chain.end(), [=](Word* a, Word* b){
+            return a->Instances > b->Instances;
+        });
+    }
 
     Word(string Data) : Data(Data) {};
 
     Word(char Data) {
         this->Data = string(1, Data);
     }
-
 };
 
+// This could also be replaced by Vector2
+class Transformation{
+public:
+    int Origin_X = 0;
+    int Origin_Y = 0;
+
+    int Target_X = 0;
+    int Target_Y = 0;
+};
 
 class Weight{
 public:
@@ -76,6 +101,19 @@ public:
     Weight(){}
 
     Weight(float Intensity) : Intensity(Intensity) {};
+};
+
+class Vector2{
+public:
+    int X = 0;
+    int Y = 0;
+
+    Vector2(){}
+    Vector2(int X, int Y) : X(X), Y(Y) {}
+
+    std::size_t operator()() const {
+        return X * INT8_MAX + Y;
+    }
 };
 
 // Teller is a software that brings Djikstra's algorithm with Markov chain algorithm.
@@ -92,23 +130,27 @@ public:
 
     //What language the entity speaks.
     Language* Speaks = nullptr;
+    
+    // The gradient map containing the indicies for diffusion and *djikstra.
+    vector<Vector2> Gradient_Map;
 
     Teller(Language* lang);
 
+
+    // Gradient Utils
+    //-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_
+    void Apply_Gradient_To_Markov();
+    vector<Vector2> Get_Surrounding(Vector2 origin, int Distance_From_Center);
+    void Print_Gradient();
+
+
+    // Utils
+    //-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_
     void Init_Weight(vector<pair<Weight,string>> weights = {});
-
-    string Generate_Thought();
-
-    string Generate_Thought(string start, string end);
-
-    string Generate_Thought(int count);
-
     vector<pair<int, int>> Get_Surrounding(int x, int y);
-
+    // Makes a slow burning gradient around the points given.
     void Diffuse_Around_Point_Of_Interest(int x, int y, int parent_x, int parent_y);
-
     void Print_Weights(string file_name);    
-
     bool Djikstra(vector<Word*>& Result, Word* Current, Word* End);
 };
 
