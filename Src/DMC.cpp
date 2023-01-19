@@ -4,6 +4,9 @@
 #include <iostream>
 #include <math.h>
 
+#include <vector>
+#include <bits/stdc++.h>
+
 using namespace std;
 
 
@@ -31,38 +34,8 @@ Language::Language(string File_Name){
     Apply_Markov_To_Buffer();
 }
 
-Word* Language::Find(string w, int Start = 0){
-    for (int i = Start; i < Markov_Buffer.size(); i++){
-        if (Markov_Buffer[i]->Data == w){
-            return Markov_Buffer[i];
-        }
-    }
-
-    if (Start > 0){
-
-        // If we get here it means that the Start point was so late defined, that there just 
-        // was no word at that point onwards, so we need to start from the Start point and go backwards.
-        for (int i = Start; i >= 0; i--){
-            if (Markov_Buffer[i]->Data == w){
-                return Markov_Buffer[i];
-            }
-        }
-
-    }
-
-    return nullptr;
-}
-
 Word* Language::Find(int x, int y){
-    for (auto w : Markov_Buffer){
-
-        if (w->X == x && w->Y == y){
-            return w;
-        }
-
-    }
-
-    return nullptr;
+    return &Cut_Buffer[x + y * Width];
 }
 
 Word* Language::Get_Left(Word* w){
@@ -217,6 +190,7 @@ void Language::Apply_Markov_To_Buffer(){
 
     Width = floor(sqrt(Cut_Buffer.size()));
 
+    // Apply indicies to the cut buffer, since it is te only liquid 2D map.
     for (int y = 0; y < Width; y++){
         for (int x = 0; x < Width; x++){
             Cut_Buffer[x + y * Width].X = x;
@@ -224,7 +198,8 @@ void Language::Apply_Markov_To_Buffer(){
         }
     }
 
-    Markov_Buffer.push_back(&Cut_Buffer[0]);
+    //Markov_Buffer.push_back(&Cut_Buffer[0]);
+    Fast_Markov[Cut_Buffer[0].Data] = &Cut_Buffer[0];
 
     // First group by one identifier.
     for (int i = 1; i < Cut_Buffer.size(); i++){
@@ -232,49 +207,167 @@ void Language::Apply_Markov_To_Buffer(){
         Word* Current = nullptr;
 
         // If this word has already been defined
-        Word* tmp = Find(Cut_Buffer[i].Data);
+        Word* tmp = Fast_Markov[Cut_Buffer[i].Data];
         if (tmp){
             Current = tmp;
         }
         else{
             // If not then make a new one and point to it.
-            Markov_Buffer.push_back(new Word(Cut_Buffer[i]));
-            Current = Markov_Buffer.back();
+            //Markov_Buffer.push_back(new Word(Cut_Buffer[i]));
+            Fast_Markov[Cut_Buffer[i].Data] = new Word(Cut_Buffer[i]);
+            //Current = Markov_Buffer.back();
+            Current = Fast_Markov[Cut_Buffer[i].Data];
+    
         }
 
-        bool Has_Been_Added_Already = false;
-        Word* Previus = Find(Cut_Buffer[i - 1].Data);
+        Word* Previus = Fast_Markov[Cut_Buffer[i - 1].Data];
 
         if (Current->Data == Previus->Data){
             continue;
         }
 
-        for (auto w : Previus->Chain){
-            if (w == Current){
-                Has_Been_Added_Already = true;
-                break;
-            }
+        if (Previus->Get_Next(Current->Data)){
+            Previus->Get_Next(Current->Data)->first++;
+        }
+        else{
+            Previus->Next_Chain.push_back({0, Current});
         }
 
-        if (!Has_Been_Added_Already){
-            Previus->Chain.push_back(Current);
+        if (Current->Get_Prev(Previus->Data)){
+            Current->Get_Prev(Previus->Data)->first++;
+        }
+        else{
+            Current->Previus_Chain.push_back({0, Previus});
         }
 
     }
+
+    Finalize_Instance_Countters();
+}
+
+// Changes the countting to probabilistics.
+void Language::Finalize_Instance_Countters(){
+    for (auto& i : Fast_Markov){
+        int sum = 0;
+        for (auto& [count, next_word] : i.second->Next_Chain){
+            sum += count;
+        }
+        for (auto& [count, next_word] : i.second->Next_Chain){
+            count /= sum;
+        }
+        sum = 0;
+        for (auto& [count, prev_word] : i.second->Previus_Chain){
+            sum += count;
+        }
+        for (auto& [count, prev_word] : i.second->Previus_Chain){
+            count /= sum;
+        }
+    }
+}
+
+void Teller::Apply_Gradient_To_Markov(){
+
+    /*
+        NOTE:
+        All words are given a number of how many times they have occured in the Markov chain.
+        The most called words are then put eatch to their own corner there are several approaches to thi method.
+        First if to cluster all the most called words into the center and the gradiently put the less called words outwards from the center.
+        Second method is to put all the main words into their own corners, there can be more main words than 4, so the buffer may need to be in n'th dimension for this to work.
+        Altough using n-dimensions wont be called gradient anymore, it would be more like a volume tranformation.
+    */
+
+    // Using Center method.
+    // With of the gradient map is same as the Width.
+    Gradient_Map.resize(Speaks->Width * Speaks->Width);
+
+    int Center_X = Speaks->Width / 2;
+    int Center_Y = Speaks->Width / 2;
+
+    // This is the max distance from the center.
+    int Max_Distance = Speaks->Width / 2;
+
+    vector<int> Ordered_Instances;
+
+    // Order the Cut_Buffer, where the most instances having words are first.
+    for (int i = 0; i < Speaks->Cut_Buffer.size(); i++){
+        Ordered_Instances.push_back(i);
+    }
+
+
+    for (int i = 0; i < Max_Distance; i++){
+        for (auto index : Get_Surrounding({0, 0}, i)){
+
+            // If the index is out of bounds, then skip it.
+            if (index.X > Max_Distance || index.Y > Max_Distance)
+                continue;
+
+            // If the index is not taken, then take it.
+            Gradient_Map[index.Y * Speaks->Width + index.X] = index;
+        }
+    }
+}
+
+void Teller::Print_Gradient(){
+
+    for (int y = 0; y < Speaks->Width; y++){
+        for (int x = 0; x < Speaks->Width; x++){
+            int space_count = 5;
+            string r = to_string(Gradient_Map[y * Speaks->Width + x].X + Gradient_Map[y * Speaks->Width + x].Y * Speaks->Width);
+            cout << r;
+            for (int i = 0; i < space_count - (r.size() - 1); i++){
+                cout << " ";
+            }
+        }
+        cout << endl;
+    }
+
+}
+
+template<typename T>
+bool Find(T obj, vector<T> list){
+    for (auto i : list){
+        if (obj() == i())
+            return true;
+    }
+
+    return false;
+}
+
+// Retuns a growing rectangle of indicies surrounding the area that is calculated from the distance from the center.
+// Distance from center when 0, returns 2x2 center indicies.
+// Distance from center when 1, returns the indicies surrounding the 2x2 indicies, that being 12 indicies.
+// Distance from center when 2, returns the indicies surrounding the 12 indicies, the being 19 indicies.
+// Distance from center when 3, returns the indicies surrounding the 19 indicies, the being 28 indicies.
+// Distance from center when 4, returns the indicies surrounding the 28 indicies, the being 39 indicies.
+// The returning indicies grow by the factor of numbers non divisible by 2, those being 7, 9, 11, ...
+// So the distance from the center by 6, returns indicies surrounding the 39 indicies, the being 52 indicies.
+vector<Vector2> Teller::Get_Surrounding(Vector2 origin, int Distance_From_Center){
+    vector<Vector2> indices;
+    for (int d = 0; d <= Distance_From_Center; d++) {
+        for (int i = origin.X - d; i <= origin.X + d; i++) {
+            for (int j = origin.Y - d; j <= origin.Y + d; j++) {
+                if (abs(i - origin.X) == d || abs(j - origin.Y) == d) {
+                    if (Find(Vector2(i, j), indices))
+                        continue;
+                    
+                    indices.push_back(Vector2(i, j));
+                }
+            }
+        }
+    }
+    return indices;
 }
 
 void Language::Output(string File_Name){
     ofstream File(File_Name);
 
-    for (int y = 0; y < Width; y++){
-        for (int x = 0; x < Width; x++){
-            File << "{" << Markov_Buffer[y * Width + x]->Data << ", {";
-            for (auto& c : Markov_Buffer[y * Width + x]->Chain){
-                File << c->Data << ", ";
-            }
-            File << "}}, \n";
+    // Prints the markov chains content with "name": {links, ...}
+    for (auto w : Fast_Markov){
+        File << w.first << ": {";
+        for (auto c : w.second->Next_Chain){
+            File << c.second->Data << ", ";
         }
-        File << endl;
+        File << "}" << endl;
     }
 
     File.close();
@@ -284,6 +377,7 @@ Teller::Teller(Language* lang){
 
     Speaks = lang;
 
+    Apply_Gradient_To_Markov();
 }
 
 // This function returns the left and right of the x and y point.
@@ -332,12 +426,11 @@ void Teller::Init_Weight(vector<pair<Weight,string>> weights){
     for (int y = 0; y < Speaks->Width; y++){
         for (int x = 0; x < Speaks->Width; x++){
             for (auto& w : weights){
-                if (w.second == Speaks->Markov_Buffer[y * Speaks->Width + x]->Data){
+                if (w.second == Speaks->Fast_Markov[Speaks->Cut_Buffer[y * Speaks->Width + x].Data]->Data){
                     Weights[y * Speaks->Width + x].Intensity = w.first.Intensity;
                     Points_Of_Interest.push_back({x, y});
                 }
             }
-
         }
     }
 
@@ -382,17 +475,17 @@ bool Reach(Word* Start, Word* End, int Current_Reach, float Previus_Distance, ve
 
     Word* Current = Start;
 
-    for (auto c : Current->Chain){
-        float Current_Distance = sqrt(pow(c->X - End->X, 2) + pow(c->Y - End->Y, 2));
+    for (auto c : Current->Next_Chain){
+        float Current_Distance = sqrt(pow(c.second->X - End->X, 2) + pow(c.second->Y - End->Y, 2));
 
         if (Current_Distance >= Previus_Distance){
-            bool r = Reach(c, End, Current_Reach - 1, Current_Distance, Path);
+            bool r = Reach(c.second, End, Current_Reach - 1, Current_Distance, Path);
 
             if (r)
                 goto GOOD_PATH;
         }
         else{
-            Current = c;
+            Current = c.second;
             goto GOOD_PATH;
         }
     }
@@ -427,77 +520,6 @@ bool Teller::Djikstra(vector<Word*>& Result, Word* Start, Word* End){
         }
 
     }
-}
-
-string Teller::Generate_Thought(){
-    string Result = "";
-
-    // First select a sentence starter.
-    Word* Start_Word = Speaks->Markov_Buffer[Choose(Speaks->Markov_Buffer.size())];
-
-    // Then select the goal word.
-    //Word* Goal_Word = Speaks->Get_Left(Speaks->Find(".", Choose(Speaks->Markov_Buffer.size())));
-    Word* Goal_Word = Speaks->Get_Down(Start_Word);
-
-    // First we are going to go through from the selected sentence starter,
-    // and go through towards the goal word, if we cant reach the goal word whitin the chunk.
-    // were going to choose the chunk that ends to the nearest to the goal word.
-
-    vector<Word*> Path;
-    vector<Word*> Trace;
-
-    Djikstra(Path, Start_Word, Goal_Word);
-
-
-    // Now we have the path, we can translate the path into string.
-    for (auto& w : Path){
-        Result += w->Data + " ";
-    }
-
-    return Result;
-}
-
-string Teller::Generate_Thought(string start, string end){
-    string Result = "";
-
-    // First select a sentence starter.
-    Word* Start_Word = Speaks->Find(start);
-
-    // Then select the goal word.
-    Word* Goal_Word = Speaks->Find(end);
-
-    // First we are going to go through from the selected sentence starter,
-    // and go through towards the goal word, if we cant reach the goal word whitin the chunk.
-    // were going to choose the chunk that ends to the nearest to the goal word.
-
-    vector<Word*> Path;
-    vector<Word*> Trace;
-
-    Djikstra(Path, Start_Word, Goal_Word);
-
-    // Now we have the path, we can translate the path into string.
-    for (auto& w : Path){
-        Result += w->Data + " ";
-    }
-
-    return Result;
-}
-
-string Teller::Generate_Thought(int Count){
-
-    Word* Current = Speaks->Markov_Buffer[Choose(Speaks->Markov_Buffer.size())];
-    string Result = "";
-
-    for (int i = 0; i < Count; i++){
-        Result += " " + Current->Data;
-
-        if (Current->Data == ".")
-            break;
-
-        Current = Current->Chain[Choose(Current->Chain.size())];
-    }
-
-    return Result;
 }
 
 void Teller::Print_Weights(string file_name){

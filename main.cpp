@@ -16,11 +16,13 @@ using namespace std;
 int main(){
     srand(time(NULL));
     
-    Language Lang("Languages/Chapter_3_Knight_At_Heart.txt");
+    Language Lang("C:/Users/gagolzar/source/repos/DMC/Languages/text.txt");
     
     Teller t(&Lang);
     
-    cout << t.Generate_Thought(123) << endl;
+    //cout << t.Generate_Thought(123) << endl;
+
+    
 
     string await;
     cin >> await;
