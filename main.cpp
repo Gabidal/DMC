@@ -5,6 +5,14 @@
 
 using namespace std;
 
+// IDEAS:
+/*
+    For deterministic behaviour we need to start from the end and look up words that chain to the current word.
+    This will return a context for the wanted word.
+
+    The connection between the end and start word is not possible to connect without manipulating the markov chain matrix.
+*/
+
 int main(){
     srand(time(NULL));
     
