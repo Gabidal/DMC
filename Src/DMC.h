@@ -7,7 +7,7 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
-#include <bits/stdc++.h>
+#include <functional>
 
 using namespace std;
 
@@ -23,7 +23,7 @@ public:
     vector<class Word> Cut_Buffer;
 
     // The Markov chain buffer, but made in map for improved performance.
-    map<string, class Word*> Fast_Markov;
+    unordered_map<string, class Word*> Fast_Markov;
 
     // Width and height dimensions. X^2
     int Width = 0;
@@ -50,25 +50,45 @@ public:
     // Given cut buffers coordinates returns markov chain index.
     class Word* Find(int x, int y);
 
-    class Word* Get_Left(class Word* w);
-    class Word* Get_Right(class Word* w);
-    class Word* Get_Up(class Word* w);
-    class Word* Get_Down(class Word* w);
+};
 
+class Weight{
+public:
+    float Intensity = 0; //-1 to 1
+
+    Weight(){}
+
+    Weight(float Intensity) : Intensity(Intensity) {};
+};
+
+class Vector2{
+public:
+    int X = 0;
+    int Y = 0;
+
+    Vector2(){}
+    Vector2(int X, int Y) : X(X), Y(Y) {}
+
+    std::size_t operator()() const {
+        return X * INT8_MAX + Y;
+    }
 };
 
 // A word contains the word id and the language id it references to.
-// This enables main language speak with some words replased with some other language.
+// This enables main language speak with some words replaced with some other language.
 // This phenomenon sometimes occurs when a entity knows more than one language.
 class Word{
 public:
     string Data = "";
 
-    int X = 0;
-    int Y = 0;
+    Vector2 Position;
 
     vector<pair<int, Word*>> Next_Chain;
     vector<pair<int, Word*>> Previus_Chain;
+
+    int Instances = 0;
+    float Importance = 1;   // 0 to 1
+    int Complexity = 0;     // How many words usually takes to describe this word.
 
     Word(string Data) : Data(Data) {};
 
@@ -95,35 +115,35 @@ public:
     }
 };
 
+enum class IDS{
+    CENTRIC_GRADIENT,
+    CUBICAL_DALMIAN_GRADIENT,
+    SPHERICAL_DALMIAN_GRADIENT,
+    CIRCULAR_DALMIAN_GRADIENT,
+};
+
 // This could also be replaced by Vector2
 class Transformation{
 public:
-    int Origin_X = 0;
-    int Origin_Y = 0;
+    Vector2 Origin; // From where
+    Vector2 Target; // to
 
-    int Target_X = 0;
-    int Target_Y = 0;
+    Transformation(){}
+
+    Transformation(Vector2 Origin, Vector2 Target) : Origin(Origin), Target(Target) {}
 };
 
-class Weight{
+class Transforms{
 public:
-    float Intensity = 0; //-1 to 1
+    // <ID, Transform>
+    unordered_map<int, Transformation> Transforms;
 
-    Weight(){}
+    void Add_Transform(IDS ID, Transformation transform){
+        Transforms[(int)ID] = transform;
+    }
 
-    Weight(float Intensity) : Intensity(Intensity) {};
-};
-
-class Vector2{
-public:
-    int X = 0;
-    int Y = 0;
-
-    Vector2(){}
-    Vector2(int X, int Y) : X(X), Y(Y) {}
-
-    std::size_t operator()() const {
-        return X * INT8_MAX + Y;
+    Transformation* Get_Transform(IDS ID){
+        return &Transforms[(int)ID];
     }
 };
 
@@ -142,17 +162,39 @@ public:
     //What language the entity speaks.
     Language* Speaks = nullptr;
     
-    // The gradient map containing the indicies for diffusion and *djikstra.
-    vector<Vector2> Gradient_Map;
+    // List of all transforms performed into the singular index.
+    vector<Transforms> Gradient_Map;
 
     Teller(Language* lang);
 
 
     // Gradient Utils
     //-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_
-    void Apply_Gradient_To_Markov();
+    
+    // Invokes all gradient transformations. 
+    void Factory();
+
+    // The most used words at the center and then less used words on the outer rims.
+    void Centric_Gradient();
+    // Most used words in their own corner, where the rest is filled by less relevant words. 
+    // Used n'th Dimensional array.
+    // Down sides:
+    // Uses more memory.
+    // Goods:
+    // All points are at the same distance from each other.
+    void Cubical_Dalmian_Gradient();
+    // same as the above but uses low resolution pointed spherical space.
+    // Down sides:
+    // Not all points have same distance from each other.
+    // Goods:
+    // Uses less memory when using just circle or spherical array.
+    void Spherical_Dalmian_Gradient();
+    void Circular_Dalmian_Gradient();
+
+    void Calculate_Importance_Scaling();
+    // All words that have the Importance Scaler above 0.5 pass as keywords.
+    vector<Word*> Get_Keywords();
     vector<Vector2> Get_Surrounding(Vector2 origin, int Distance_From_Center);
-    void Print_Gradient();
 
 
     // Utils
@@ -161,7 +203,13 @@ public:
     vector<pair<int, int>> Get_Surrounding(int x, int y);
     // Makes a slow burning gradient around the points given.
     void Diffuse_Around_Point_Of_Interest(int x, int y, int parent_x, int parent_y);
-    void Print_Weights(string file_name);    
+    void Print_Weights(string file_name);   
+
+    // Circular tools 
+    //-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_
+    vector<Vector2> Get_Circle_Perimeter_Indicies(int Radius);
+    float Get_Radians_From_Circle_Perimeter(Vector2 perimeter_position, int Radius);
+    float Get_Symmetrical_Spacing_On_Circle_Perimeter(int Point_Count);
 
     // 
     bool Djikstra(vector<Word*>& Result, Word* Current, Word* End);

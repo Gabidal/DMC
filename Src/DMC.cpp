@@ -1,11 +1,13 @@
 #include "DMC.h"
 
+#define _USE_MATH_DEFINES
+
 #include <fstream>
 #include <iostream>
 #include <math.h>
-
+#include <cmath>
+#include <algorithm>
 #include <vector>
-#include <bits/stdc++.h>
 
 using namespace std;
 
@@ -36,67 +38,6 @@ Language::Language(string File_Name){
 
 Word* Language::Find(int x, int y){
     return &Cut_Buffer[x + y * Width];
-}
-
-Word* Language::Get_Left(Word* w){
-    
-    int Result_X = w->X;
-    int Result_Y = w->Y;
-
-    if (w->X - 1 < 0){
-        Result_Y--;
-        Result_X = Width - 1;
-    }
-    else{
-        Result_X--;
-    }
-
-    return Find(Result_Y, Result_X);
-}
-
-Word* Language::Get_Right(Word* w){
-    int Result_X = w->X;
-    int Result_Y = w->Y;
-
-    if (w->X + 1 >= Width){
-        Result_Y++;
-        Result_X = 0;
-    }
-    else{
-        Result_X++;
-    }
-
-    return Find(Result_Y, Result_X);
-}
-
-Word* Language::Get_Up(Word* w){
-    int Result_X = w->X;
-    int Result_Y = w->Y;
-
-    if (w->Y - 1 < 0){
-        Result_X--;
-        Result_Y = Cut_Buffer.size() / Width - 1;
-    }
-    else{
-        Result_Y--;
-    }
-
-    return Find(Result_Y, Result_X);
-}
-
-Word* Language::Get_Down(Word* w){
-    int Result_X = w->X;
-    int Result_Y = w->Y;
-
-    if (w->Y + 1 >= Cut_Buffer.size() / Width){
-        Result_X++;
-        Result_Y = 0;
-    }
-    else{
-        Result_Y++;
-    }
-
-    return Find(Result_Y, Result_X);
 }
 
 void Language::Concat_Raw_Buffer(){
@@ -193,8 +134,7 @@ void Language::Apply_Markov_To_Buffer(){
     // Apply indicies to the cut buffer, since it is te only liquid 2D map.
     for (int y = 0; y < Width; y++){
         for (int x = 0; x < Width; x++){
-            Cut_Buffer[x + y * Width].X = x;
-            Cut_Buffer[x + y * Width].Y = y;
+            Cut_Buffer[x + y * Width].Position = {x, y};
         }
     }
 
@@ -217,7 +157,7 @@ void Language::Apply_Markov_To_Buffer(){
             Fast_Markov[Cut_Buffer[i].Data] = new Word(Cut_Buffer[i]);
             //Current = Markov_Buffer.back();
             Current = Fast_Markov[Cut_Buffer[i].Data];
-    
+            Current->Instances++;
         }
 
         Word* Previus = Fast_Markov[Cut_Buffer[i - 1].Data];
@@ -265,7 +205,17 @@ void Language::Finalize_Instance_Countters(){
     }
 }
 
-void Teller::Apply_Gradient_To_Markov(){
+void Teller::Factory(){
+
+    Calculate_Importance_Scaling();
+
+    Centric_Gradient();
+    Cubical_Dalmian_Gradient();
+    Spherical_Dalmian_Gradient();
+
+}
+
+void Teller::Centric_Gradient(){
 
     /*
         NOTE:
@@ -293,7 +243,12 @@ void Teller::Apply_Gradient_To_Markov(){
         Ordered_Instances.push_back(i);
     }
 
+    // Sort the ordered instances.
+    sort(Ordered_Instances.begin(), Ordered_Instances.end(), [this](int a, int b){
+        return Speaks->Cut_Buffer[a].Instances > Speaks->Cut_Buffer[b].Instances;
+    });
 
+    int Order_Index = 0;
     for (int i = 0; i < Max_Distance; i++){
         for (auto index : Get_Surrounding({0, 0}, i)){
 
@@ -301,26 +256,141 @@ void Teller::Apply_Gradient_To_Markov(){
             if (index.X > Max_Distance || index.Y > Max_Distance)
                 continue;
 
-            // If the index is not taken, then take it.
-            Gradient_Map[index.Y * Speaks->Width + index.X] = index;
+            Transformation Current_Transform;
+            Current_Transform.Origin = Speaks->Cut_Buffer[
+                Ordered_Instances[Order_Index++]
+            ].Position;
+
+            Current_Transform.Target = index;
+
+            // Save the transformation suggestions.
+            Gradient_Map[index.Y * Speaks->Width + index.X].Add_Transform(
+                IDS::CENTRIC_GRADIENT, 
+                Current_Transform
+            );
         }
     }
 }
 
-void Teller::Print_Gradient(){
+void Teller::Cubical_Dalmian_Gradient(){
 
-    for (int y = 0; y < Speaks->Width; y++){
-        for (int x = 0; x < Speaks->Width; x++){
-            int space_count = 5;
-            string r = to_string(Gradient_Map[y * Speaks->Width + x].X + Gradient_Map[y * Speaks->Width + x].Y * Speaks->Width);
-            cout << r;
-            for (int i = 0; i < space_count - (r.size() - 1); i++){
-                cout << " ";
-            }
-        }
-        cout << endl;
+    /*
+        Generates a n'th dimensional array to hold all the words.
+        all keywords have their own corner.
+    */
+    vector<Word*> Keywords = Get_Keywords();
+
+}
+
+void Teller::Spherical_Dalmian_Gradient(){
+
+
+
+}
+
+vector<Vector2> Teller::Get_Circle_Perimeter_Indicies(int Radius){
+    vector<Vector2> Result;
+
+    for (int x = -Radius; x < Radius; x++){
+        
+        // Now calculate the height of that current x position.
+        int y = sqrt(Radius * Radius - x * x);
+
+        Result.push_back({x, y});
+        Result.push_back({x, -y});
     }
 
+    return Result;
+}
+
+float Teller::Get_Radians_From_Circle_Perimeter(Vector2 perimeter_position, int Radius){
+
+    // radian = arctan(y/x)
+    // where y is the perimeter_position.Y and x is radius - x 
+
+    return atan2(perimeter_position.Y, Radius - perimeter_position.X);
+}
+
+float Teller::Get_Symmetrical_Spacing_On_Circle_Perimeter(int Point_Count){
+
+    // The spacing between the points on the circle perimeter is 2 * pi / Point_Count
+
+    return 2 * M_PI / Point_Count;
+}
+
+void Teller::Circular_Dalmian_Gradient(){
+    vector<Word*> Keywords = Get_Keywords();
+
+    // We need to get the circle radius needed to house the square area in the circle.
+    int Square_Area = Speaks->Width * Speaks->Width;  
+
+    // Get the radius of the circle from the square area
+    float Radius = sqrt(Square_Area / M_PI);
+
+    // This is the distance between the points from each other.
+    float Radian_Spacing = Get_Symmetrical_Spacing_On_Circle_Perimeter(Keywords.size());
+
+    vector<Vector2> Perimeter_Points = Get_Circle_Perimeter_Indicies(Radius);
+
+    float Previus_Radian = 0;   // This probably needs to be value of 'Radian_Spacing'
+    int Current_Keyword_Index = 0;
+    for (auto perimeter_point : Perimeter_Points){
+
+        float Current_Radian = Get_Radians_From_Circle_Perimeter(perimeter_point, Radius);
+
+        float Radian_Difference = Current_Radian - Previus_Radian;
+
+        // If the radian difference is bigger than the radiant difference, then we can use this point.
+        if (Radian_Difference > Radian_Spacing){
+
+            // Save the transformation suggestions.
+            Gradient_Map[perimeter_point.Y * Speaks->Width + perimeter_point.X].Add_Transform(
+                IDS::CIRCULAR_DALMIAN_GRADIENT, 
+                {
+                    Keywords[Current_Keyword_Index]->Position,
+                    perimeter_point
+                }
+            );
+
+            Current_Keyword_Index++;
+
+            // Reset the radian difference.
+            Previus_Radian = Current_Radian;
+        }
+    }
+}
+
+void Teller::Calculate_Importance_Scaling(){
+    // Calculate importance scaling for each word
+    for (auto& i : Speaks->Fast_Markov){
+        i.second->Importance = i.second->Complexity + i.second->Next_Chain.size() + i.second->Previus_Chain.size();
+
+        i.second->Importance /= (float)Speaks->Cut_Buffer.size();
+    }
+
+    // Now we need to normalize the importance scaler.
+    float Max = 0;
+
+    for (auto& i : Speaks->Fast_Markov){
+        if (i.second->Importance > Max)
+            Max = i.second->Importance;
+    }
+
+    // Apply the normalization.
+    for (auto& i : Speaks->Fast_Markov){
+        i.second->Importance /= Max;
+    }
+}
+
+vector<Word*> Teller::Get_Keywords(){
+    // All words that have the Importance Scaler above 0.5 pass as keywords.
+    vector<Word*> Keywords;
+
+    for (auto& i : Speaks->Fast_Markov){
+        if (i.second->Importance > 0.5){
+            Keywords.push_back(i.second);
+        }
+    }
 }
 
 template<typename T>
@@ -377,7 +447,7 @@ Teller::Teller(Language* lang){
 
     Speaks = lang;
 
-    Apply_Gradient_To_Markov();
+    Centric_Gradient();
 }
 
 // This function returns the left and right of the x and y point.
@@ -464,62 +534,6 @@ void Teller::Diffuse_Around_Point_Of_Interest(int x, int y, int parent_x, int pa
 // This function returns a random number between 0 and the count
 int Choose(int Count){
     return max(rand(), 1) % Count;
-}
-
-const float Word_Cost = 0.1f;   // How much a single word costs
-const int Maximum_Reach = 3;
-
-bool Reach(Word* Start, Word* End, int Current_Reach, float Previus_Distance, vector<Word*>& Path){
-    if (Current_Reach < 0)
-        return false;
-
-    Word* Current = Start;
-
-    for (auto c : Current->Next_Chain){
-        float Current_Distance = sqrt(pow(c.second->X - End->X, 2) + pow(c.second->Y - End->Y, 2));
-
-        if (Current_Distance >= Previus_Distance){
-            bool r = Reach(c.second, End, Current_Reach - 1, Current_Distance, Path);
-
-            if (r)
-                goto GOOD_PATH;
-        }
-        else{
-            Current = c.second;
-            goto GOOD_PATH;
-        }
-    }
-
-    return false;
-
-    GOOD_PATH:;
-    Path.push_back(Current);
-    return true;
-}
-
-bool Teller::Djikstra(vector<Word*>& Result, Word* Start, Word* End){
-    float Current_Distance = sqrt(pow(Start->X - End->X, 2) + pow(Start->Y - End->Y, 2));
-    Word* Current = Start;
-    Result.push_back(Current);
-
-    START_NEXT:;
-    for (int Current_Reach = 1; Current_Reach <= Maximum_Reach; Current_Reach++){
-        
-        vector<Word*> path;
-        bool r = Reach(Current, End, Current_Reach, Current_Distance, path);
-
-        if (r){
-            Result.insert(Result.end(), path.rbegin(), path.rend());
-            Current = Result.back();
-            Current_Distance = sqrt(pow(Current->X - End->X, 2) + pow(Current->Y - End->Y, 2));
-
-            if (Current == End || Current_Distance <= 1)
-                return true;
-
-            goto START_NEXT;
-        }
-
-    }
 }
 
 void Teller::Print_Weights(string file_name){
