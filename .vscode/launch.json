@@ -2,17 +2,17 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debuggarna",
+      "name": "unix",
       "type": "cppdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/Build/DMC.exe",
+      "program": "${workspaceFolder}/bin/build/dmc",
       "args": [],
       "stopAtEntry": false,
-      "cwd": "${fileDirname}",
+      "cwd": "${workspaceFolder}",
       "environment": [],
       "externalConsole": false,
       "MIMode": "gdb",
-      "miDebuggerPath": "C:/Users/gagolzar/msys/ucrt64/bin/gdb.exe",
+      "miDebuggerPath": "gdb",
       "preLaunchTask": "Buildarna",
       "setupCommands": [
           {

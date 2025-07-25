@@ -1,13 +1,49 @@
 # DMC (Deterministic Markov Chain) 
-DMC is an open-source project that aims to create a new approach to text generation using Markov chains. The goal of the project is to create a Markov chain that can be ordered around to tell what context to tell. The project is based on the idea of transforming the Markov chain into a 2D plane where words with similar context are close to each other, making it easier to traverse.
 
-## Problem
-The main problem that DMC aims to solve is the difficulty of traversing linear paths in natural language, where the current word has some probabilities to hop into the next word and thus make sentences. DMC aims to overcome this problem by creating a 2D gradient where the similarity of a word gets less and less the farther away it is from another word.
+DMCA is a symbolic semantic memory system designed to complement and extend traditional vector databases. It serves as the foundation for FixCom's intelligent, AI-assisted release note generator
 
-## Solution
-To achieve this goal, the project utilizes dimensionality reduction techniques such as PCA and t-SNE to create this 2D gradient. Additionally, the project also explores the use of clustering algorithms and the vector space model to group words with similar context together.
+DMCA is to power the backend of FixCom, a tool that automates Git commit summarization, changelog generation, and release note authoring using small quantized models.
 
-## Restrictions
-The project is built without the use of neural networks and the main reason for this is to find an equation for text generation like neural networks do.
+## FixCom already:
+- Parses commits into hunks
+- Summarizes each hunk independently using tiny LLMs (less context rot)
+- Aggregates hunks into commit-level summaries
+- Tags hunks using Ctags, and stores keywords in a vector DB
+- Segments release notes by gathering hunks related to a given keyword
+- **However, this system is limited: the vector DB lacks semantic understanding, relationship modeling, and context merging.**
 
-In summary, DMC is an open-source project that aims to create a new approach to text generation using Markov chains. The project seeks to overcome the difficulties of traversing linear paths in natural language by creating a 2D gradient of words with similar context. The project utilizes dimensionality reduction techniques, clustering algorithms and the vector space model to achieve this goal.
+## DMCA addresses the limitations of static keyword search by constructing a symbolic Markov graph, where:
+- Nodes represent source-level entities (e.g., functions, classes, variables) and semantic concepts (e.g., "thread-safe", "render pipeline").
+- Edges represent probabilistic transitions between symbols based on co-occurrence, file proximity, call relations, or summarizer keywords.
+- Commits are modeled as subgraphs, giving them semantic “footprints.”
+- Features (like threading changes, renderer refactors, etc.) are inferred as connected regions of the graph.
+
+## This allows DMCA to:
+- Discover semantically related commits automatically
+- Merge related concepts and track refactors over time
+- Build structured, modular release notes per feature
+- Provide full explainability without large LLMs
+
+```
+        Git Repo
+            │
+            ▼
+    [ FixCom Hunks ]
+            │
+    +-----┴------+-----------------------------+
+    |            |                             |
+Small Model   ➜ Summary                  Extract CTags
+    |                                         |
+Commit Summary ◄───────────── Tag/Concept Mapping
+    |                                         |
+    +-------------→ [ DMCA Graph ] ←----------+
+                        │
+                        ▼
+        Graph Regions + Commit Subgraphs
+                        │
+                        ▼
+                [ DMCA Output ]
+                        │
+                        ▼
+        FixCom Generates Release Notes
+```
