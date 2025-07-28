@@ -1,12 +1,16 @@
 #include "jsonParser.h"
+#include "filter.h"
+#include "abstract.h"
 #include "types.h"
+
+
 #include <iostream>
 #include <chrono>
 #include <iomanip>
 
 int main() {
     try {
-        std::cout << "DMC - JSON Parser Demo\n";
+        std::cout << "DMC\n";
         std::cout << "=====================\n\n";
         
         const std::string filepath = "test/data/commit_summaries.json";
@@ -40,33 +44,58 @@ int main() {
         std::cout << "- Total ctag definitions: " << totalDefinitions << "\n";
         std::cout << "- Total regex definitions: " << totalKeyPoints << "\n\n";
         
-        // Display first few commits as examples
-        std::cout << "First 3 commits:\n";
-        std::cout << std::string(50, '-') << "\n";
-        
-        for (size_t i = 0; i < std::min(size_t(3), commits.size()); ++i) {
-            const auto& commit = commits[i];
-            
-            std::cout << "Commit " << (i + 1) << ":\n";
-            std::cout << "  ID: " << commit.id.substr(0, 12) << "...\n";
-            std::cout << "  Original Message: " << commit.originalMessage.substr(0, 80);
-            if (commit.originalMessage.length() > 80) std::cout << "...";
-            std::cout << "\n";
-            
-            std::cout << "  Hunk Summaries: " << commit.hunkSummaries.size() << " items\n";
-            std::cout << "  New Message: " << commit.newMessage.substr(0, 80);
-            if (commit.newMessage.length() > 80) std::cout << "...";
-            std::cout << "\n";
-            
-            std::cout << "  CTag Definitions: " << commit.ctagDefinitions.size() << " items\n";
-            std::cout << "  Regex Definitions: " << commit.regexDefinitions.size() << " items\n";
-            
-            if (i < 2) std::cout << "\n";
+        // Now lets filter the definitions in each commit
+        for (auto& commit : commits) {
+            commit.ctagDefinitions = filter::DefinitionFilter::filterDefinitions(commit.ctagDefinitions);
+            commit.regexDefinitions = filter::DefinitionFilter::filterDefinitions(commit.regexDefinitions);
         }
+
+        // Now we'll feed the combed commits into the abstract
+        abstract::AbstractSystem abstractSystem;
+        abstractSystem.processCommits(commits);
+
+        abstract::AbstractSystem::AbstractStats stats = abstractSystem.getStatistics();
+
+        std::cout << "Abstract System Statistics:\n";
+        std::cout << "- Total definitions: " << stats.totalDefinitions << "\n";
+        std::cout << "- Total connections: " << stats.totalConnections << "\n";
+        std::cout << "- Total commits processed: " << stats.totalCommits << "\n";
+        std::cout << "- Average occurrence: " << std::fixed << std::setprecision(4) << stats.averageOccurrence << "\n";
+        std::cout << "- Average chronic point: " << std::fixed << std::setprecision(4) << stats.averageChronicPoint << "\n";
+        std::cout << "- Average connections per definition: " << std::fixed << std::setprecision(2) << stats.averageConnectionsPerDefinition << "\n\n";
         
-        std::cout << std::string(50, '-') << "\n";
-        std::cout << "JSON parsing completed successfully!\n";
-        
+        // Now we'll call the clustering algos
+        abstractSystem.cluster();
+
+        const auto clusters = abstractSystem.getClusters();
+
+        std::cout << "Generated Clusters:\n";
+        for (const auto cluster : clusters) {
+            if (cluster->definitions.size() < 2)
+                continue;
+                
+            std::cout << "- Cluster Type: ";
+            switch (cluster->type) {
+                case types::cluster::Type::CHRONIC:
+                    std::cout << "CHRONIC";
+                    std::cout << " | " << "Radius: " << std::fixed << std::setprecision(6) << ((types::cluster::chronic*)cluster)->radius * 1000 << " | ";
+                    break;
+                case types::cluster::Type::OCCURRENCE:
+                    std::cout << "OCCURRENCE";
+                    std::cout << " | " << "Radius: " << std::fixed << std::setprecision(6) << ((types::cluster::occurrence*)cluster)->radius * 10000 << " | ";
+                    break;
+                default:
+                    std::cout << "Unknown";
+                    break;
+            }
+
+            std::cout << ", Definitions: ";
+            for (const auto* def : cluster->definitions) {
+                std::cout << def->symbol << " ";
+            }
+            std::cout << "\n";
+        }
+
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;

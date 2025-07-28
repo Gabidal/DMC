@@ -47,3 +47,5 @@ Commit Summary ◄───────────── Tag/Concept Mapping
                         ▼
         FixCom Generates Release Notes
 ```
+
+![./bin/img/DMC.svg](./bin/img/DMC.svg)

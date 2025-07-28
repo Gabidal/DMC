@@ -8,7 +8,7 @@ void testBasicParsing() {
     
     try {
         auto start = std::chrono::high_resolution_clock::now();
-        auto commits = jsonParser::FastJsonParser::parseFromFile("test/data/commit_summaries.json");
+        auto commits = jsonParser::FastJsonParser::parseFromFile("../../test/data/commit_summaries.json");
         auto end = std::chrono::high_resolution_clock::now();
         
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -26,7 +26,7 @@ void testUtilityFunctions() {
     std::cout << "=== Utility Functions Test ===\n";
     
     try {
-        auto commits = jsonParser::FastJsonParser::parseFromFile("test/data/commit_summaries.json");
+        auto commits = jsonParser::FastJsonParser::parseFromFile("../../test/data/commit_summaries.json");
         
         // Test statistics
         std::cout << "Statistics:\n";
@@ -91,7 +91,7 @@ void testPerformance() {
         
         for (int i = 0; i < iterations; ++i) {
             auto start = std::chrono::high_resolution_clock::now();
-            auto commits = jsonParser::FastJsonParser::parseFromFile("test/data/commit_summaries.json");
+            auto commits = jsonParser::FastJsonParser::parseFromFile("../../test/data/commit_summaries.json");
             auto end = std::chrono::high_resolution_clock::now();
             
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -126,7 +126,7 @@ void testDataIntegrity() {
     std::cout << "=== Data Integrity Test ===\n";
     
     try {
-        auto commits = jsonParser::FastJsonParser::parseFromFile("test/data/commit_summaries.json");
+        auto commits = jsonParser::FastJsonParser::parseFromFile("../../test/data/commit_summaries.json");
         
         // Check that we have the expected data structure
         bool hasCommitsWithData = false;

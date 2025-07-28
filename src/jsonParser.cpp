@@ -161,6 +161,10 @@ std::vector<types::commit> FastJsonParser::parseCommitSummaries() {
     
     do {
         commits.push_back(parseCommit());
+
+        // Set timeIndex on the newly added commit
+        commits.back().timeIndex = static_cast<unsigned int>(commits.size() - 1);
+
         skipWhitespace();
     } while (match(','));
     

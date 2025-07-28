@@ -100,8 +100,6 @@ meson compile -C build || exit 1
 
 # Step 5: Set up analytics tools
 echo "Step 5: Setting up analytics tools..."
-# Step 5: Set up analytics tools
-echo "Step 5: Setting up analytics tools..."
 
 echo
 echo "=== Initialization Complete ==="

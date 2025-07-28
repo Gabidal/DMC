@@ -9,7 +9,7 @@
 
 project(
   'DMC', 'cpp',
-  version : '0.1.8',
+  version : '0.0.1',
   #DEBUG
   default_options : ['warning_level=3', 'cpp_std=c++17', 'debug=true', 'buildtype=debug']
   #RELEASE
@@ -27,7 +27,9 @@ TYPE = DEBUG  # Change this to RELEASE or PROFILE for different build types
 # Source files for the project
 sources = [
   '../src/main.cpp',
-  '../src/jsonParser.cpp'
+  '../src/jsonParser.cpp',
+  '../src/filter.cpp',
+  '../src/abstract.cpp'
 ]
 
 # SIMD and CPU-specific options
@@ -110,17 +112,26 @@ executable(
 # Test executable
 executable(
   'test_parser',               # Test executable name
-  ['../src/test_parser.cpp', '../src/jsonParser.cpp'],
+  ['../test/test_parser.cpp', '../src/jsonParser.cpp'],
   install : false,              # Don't install test executable
   cpp_args: cpp_args,          # C++ compiler flags
   link_args: link_args         # Linker flags
 )
 
-# Example executable
+# Filter test executable
 executable(
-  'example',                   # Example executable name
-  ['../src/example.cpp', '../src/jsonParser.cpp'],
-  install : false,              # Don't install example executable
+  'test_filter',               # Filter test executable name
+  ['../test/test_filter.cpp', '../src/filter.cpp'],
+  install : false,              # Don't install test executable
+  cpp_args: cpp_args,          # C++ compiler flags
+  link_args: link_args         # Linker flags
+)
+
+# Abstract test executable
+executable(
+  'test_abstract',             # Abstract test executable name
+  ['../test/test_abstract.cpp', '../src/abstract.cpp', '../src/filter.cpp', '../src/jsonParser.cpp'],
+  install : false,              # Don't install test executable
   cpp_args: cpp_args,          # C++ compiler flags
   link_args: link_args         # Linker flags
 )

@@ -82,6 +82,20 @@
         "cuchar": "cpp",
         "cwctype": "cpp",
         "memory_resource": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "bitset": "cpp",
+        "codecvt": "cpp",
+        "cstdarg": "cpp",
+        "deque": "cpp",
+        "numeric": "cpp",
+        "random": "cpp",
+        "string_view": "cpp",
+        "numbers": "cpp",
+        "semaphore": "cpp",
+        "span": "cpp",
+        "cinttypes": "cpp",
+        "__nullptr": "cpp",
+        "__locale": "cpp",
+        "set": "cpp"
     }
 }

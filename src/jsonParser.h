@@ -8,6 +8,8 @@
 #include <fstream>
 #include <iostream>
 
+// Parses simple json file while keeping the chronic order of the commits, where the index of commit is the same as index at the time delta.
+
 namespace jsonParser {
     
     class FastJsonParser {
