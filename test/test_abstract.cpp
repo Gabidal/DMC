@@ -25,7 +25,7 @@ namespace test_abstract {
     void testBasicAbstractSystemFunctionality() {
         std::cout << "Testing basic AbstractSystem functionality..." << std::endl;
         
-        abstract::AbstractSystem system;
+        abstract::base system;
         
         // Create test commits with overlapping definitions
         std::vector<types::commit> commits;
@@ -79,7 +79,7 @@ namespace test_abstract {
     void testClusteringFunctionality() {
         std::cout << "\nTesting clustering functionality..." << std::endl;
         
-        abstract::AbstractSystem system;
+        abstract::base system;
         
         // Create test commits with clear clustering patterns
         std::vector<types::commit> commits;
@@ -122,7 +122,7 @@ namespace test_abstract {
         std::cout << "  ✓ Generated " << allClusters.size() << " total clusters" << std::endl;
         
         // Test different cluster types
-        auto chronicLClusters = system.getClustersByType(types::cluster::Type::CHRONIC);
+        auto chronicLClusters = system.getClustersByType(types::node::Type::CHRONIC);
         
         std::cout << "  ✓ Chronic clusters: " << chronicLClusters.size() << std::endl;
         
@@ -130,7 +130,7 @@ namespace test_abstract {
             if (cluster->definitions.size() >= 2) {
                 std::cout << "  Cluster (type: ";
                 switch(cluster->type) {
-                    case types::cluster::Type::CHRONIC:
+                    case types::node::Type::CHRONIC:
                         std::cout << "CHRONIC";
                         break;
                     default:
@@ -141,8 +141,8 @@ namespace test_abstract {
                 
                 std::vector<std::string> symbols;
                 for (const auto* def : cluster->definitions) {
-                    symbols.push_back(def->symbol);
-                    std::cout << "    - " << def->symbol << std::endl;
+                    symbols.push_back(def->getName());
+                    std::cout << "    - " << def->getName() << std::endl;
                 }
                 
                 // Check if this looks like a web-related cluster
@@ -178,7 +178,7 @@ namespace test_abstract {
     void testSimilarityMatrix() {
         std::cout << "\nTesting similarity matrix generation..." << std::endl;
         
-        abstract::AbstractSystem system;
+        abstract::base system;
         
         // Create simple test case with known relationships
         std::vector<types::commit> commits;
@@ -225,7 +225,7 @@ namespace test_abstract {
     void testEdgeCases() {
         std::cout << "\nTesting edge cases..." << std::endl;
         
-        abstract::AbstractSystem system;
+        abstract::base system;
         
         // Test empty system
         system.cluster();

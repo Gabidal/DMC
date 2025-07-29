@@ -80,8 +80,8 @@ link_args = []
 
 # Add custom flags based on build type
 if TYPE == DEBUG
-  cpp_args += ['-DDMC_DEBUG', '-Og', '-flto', '-fwhole-program']
-  link_args += ['-flto', '-fwhole-program']
+  cpp_args += ['-DDMC_DEBUG']
+  link_args += []
 elif TYPE == RELEASE
   cpp_args += ['-DDMC_RELEASE', '-march=native', '-flto', '-fwhole-program']
   link_args += ['-flto', '-fwhole-program']

@@ -32,50 +32,133 @@ namespace types {
         }
     };
 
-    struct definition {
+    namespace node {
+        enum class Type {
+            UNKNOWN,
+            DEFINITION,
+            CHRONIC,
+            OCCURRENCE,
+            DISSONANCE_HUB,     // Hub clusters, consisting of similar clusters with same radiuses representing the field radius, where larger radius represents more different definitions.
+            RESONANCE_HUB       // Hub clusters, consisting of similar definition vectors.
+        };
+
+        class base {
+        public:
+            Type type = node::Type::UNKNOWN;
+
+            base(Type t) : type(t) {}
+
+            virtual ~base() {}
+
+            virtual std::string getName() const = 0;
+            virtual std::string getStats(unsigned int indent = 0) = 0;
+
+            virtual std::vector<float> getVector() = 0;
+
+            std::string getVectorAsString() {
+                std::vector<float> vec = getVector();
+                std::string result = "[";
+                for (size_t i = 0; i < vec.size(); ++i) {
+                    result += std::to_string(vec[i]);
+                    if (i < vec.size() - 1) {
+                        result += ", ";
+                    }
+                }
+                return result + "]";
+            }
+        };
+    }
+
+    class definition : public node::base {
+    public:
         std::string symbol;     // The name this definition goes by.
 
         std::vector<connection> connections;    // Single definition can be present in multiple different commits, where the newer commits have more impact on said definition and its use.
 
-        float occurrence;   // from 0.0f to 1.0f, representing the normalized weight amount of this definition occurred in all of the commits.
+        float CommitFrequency;      // from 0.0f to 1.0f, representing the normalized weight amount of this definition occurred in all of the commits.
+        float ClusterFrequency;     // from 0.0f to 1.0f, representing the normalized weight amount of this definition occurred in all of the clusters.
 
         float chronicPoint; // from 0.0f to 1.0f, representing as a 1D vector, where this definition is most common in the order of commits in time axis.
+
+        definition() : base(node::Type::DEFINITION) {}
+
+        std::string getName() const override {
+            return symbol;
+        }
+
+        std::string getStats(unsigned int indent = 0) override {
+            std::string spaces(indent * 2, ' ');
+            return
+                spaces + "  {\n" +
+                spaces + "    \"symbol\": \"" + symbol + "\",\n" +
+                spaces + "    \"vector\": " + getVectorAsString() + ",\n" +
+                spaces + "    \"connections\": " + std::to_string(connections.size()) + "\n" +
+                spaces + "  }";
+        }
+
+        std::vector<float> getVector() override {
+            return {
+                CommitFrequency,
+                ClusterFrequency,
+                chronicPoint
+            };
+        }
     };
 
-    namespace cluster {
-        enum class Type {
-            UNKNOWN,
-            CHRONIC,
-            OCCURRENCE
-        };
-    
-        class base {
+    class cluster : public node::base {
         public:
-            Type type = Type::UNKNOWN;
-    
-            std::vector<const definition*> definitions;    // Contains pointers to the definitions under this cluster.
+        static constexpr float upscaleRadius = 1000;
 
-            base(Type t) {  
-                type = t;
+        float radius;       // Represents the required radius of the definitions and their indifference to be encompassed under this cluster type.
+        std::vector<base*> definitions;    // Contains pointers to the definitions under this cluster.
+
+        std::vector<float> cachedVector;
+
+        cluster(node::Type t) : base(t), radius(std::numeric_limits<float>::min()) { }
+
+        ~cluster() override {
+            for (auto* def : definitions) {
+                delete def; // Clean up definitions if they were dynamically allocated
             }
-        };
+        }
+
+        std::string getName() const override {
+            switch (type) {
+                case node::Type::CHRONIC:
+                    return "CHRONIC";
+                case node::Type::OCCURRENCE:
+                    return "OCCURRENCE";
+                case node::Type::DISSONANCE_HUB:
+                    return "DISSONANCE_HUB";
+                case node::Type::RESONANCE_HUB:
+                    return "RESONANCE_HUB";
+                default:
+                    return "UNKNOWN";
+            }
+        }
     
-        class chronic : public base {
-        public:
-            float radius;       // Represents the required radius of the definitions and their indifference to be encompassed under this cluster type.
+        std::string getStats(unsigned int indent = 0) override {
+            std::string spaces(indent * 2, ' ');
 
-            chronic() : base(Type::CHRONIC), radius(std::numeric_limits<float>::min()) {}
-        };
+            std::string definitionsJson = "[\n";
 
-        class occurrence : public base {
-        public:
-            float radius;       // Represents the required radius of the definitions and their indifference to be encompassed under this cluster type.
+            for (size_t i = 0; i < definitions.size(); ++i) {
+                if (i > 0) definitionsJson += ",\n";
+                definitionsJson += definitions[i]->getStats(indent + 2);
+            }
+            definitionsJson += "\n" + spaces + "    " + "]";
 
-            occurrence() : base(Type::OCCURRENCE), radius(std::numeric_limits<float>::min()) {}
-        };
-    }
-
-
+            return
+                spaces + "  {\n" +
+                spaces + "    \"type\": \"" + getName() + "\",\n" +
+                spaces + "    \"radius\": " + std::to_string(radius * upscaleRadius) + ",\n" +
+                spaces + "    \"vector\": " + getVectorAsString() + ",\n" +
+                spaces + "    \"definitions\": " + definitionsJson + "\n" +
+                spaces + "  }";
+        }
+    
+        std::vector<float> getVector() override;
+    };
 }
 
 #endif

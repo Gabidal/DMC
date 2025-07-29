@@ -51,10 +51,10 @@ int main() {
         }
 
         // Now we'll feed the combed commits into the abstract
-        abstract::AbstractSystem abstractSystem;
+        abstract::base abstractSystem;
         abstractSystem.processCommits(commits);
 
-        abstract::AbstractSystem::AbstractStats stats = abstractSystem.getStatistics();
+        abstract::base::abstractStats stats = abstractSystem.getStatistics();
 
         std::cout << "Abstract System Statistics:\n";
         std::cout << "- Total definitions: " << stats.totalDefinitions << "\n";
@@ -69,32 +69,20 @@ int main() {
 
         const auto clusters = abstractSystem.getClusters();
 
-        std::cout << "Generated Clusters:\n";
+        std::cout << "Generated Clusters (JSON format):\n";
+        std::cout << "[\n";
+        bool first = true;
         for (const auto cluster : clusters) {
-            if (cluster->definitions.size() < 2)
+            if (cluster->type != types::node::Type::DISSONANCE_HUB)
                 continue;
-                
-            std::cout << "- Cluster Type: ";
-            switch (cluster->type) {
-                case types::cluster::Type::CHRONIC:
-                    std::cout << "CHRONIC";
-                    std::cout << " | " << "Radius: " << std::fixed << std::setprecision(6) << ((types::cluster::chronic*)cluster)->radius * 1000 << " | ";
-                    break;
-                case types::cluster::Type::OCCURRENCE:
-                    std::cout << "OCCURRENCE";
-                    std::cout << " | " << "Radius: " << std::fixed << std::setprecision(6) << ((types::cluster::occurrence*)cluster)->radius * 10000 << " | ";
-                    break;
-                default:
-                    std::cout << "Unknown";
-                    break;
-            }
 
-            std::cout << ", Definitions: ";
-            for (const auto* def : cluster->definitions) {
-                std::cout << def->symbol << " ";
+            if (!first) {
+                std::cout << ",\n";
             }
-            std::cout << "\n";
+            std::cout << "  " << cluster->getStats();
+            first = false;
         }
+        std::cout << "\n]\n";
 
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;

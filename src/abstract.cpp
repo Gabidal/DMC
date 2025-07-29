@@ -9,16 +9,50 @@
 #include <set>
 #include <random>
 
+namespace types {
+    std::vector<float> cluster::getVector() {
+        if (!cachedVector.empty())
+            return cachedVector;
+
+        std::vector<float> result = {0, 0, 0};
+
+        for (auto* def : definitions) {
+            std::vector<float> defVector = def->getVector();
+
+            if (defVector.size() != 3) {
+                std::cerr << "Error: Definition vector size is not 3!" << std::endl;
+                continue;
+            }
+            
+            for (size_t i = 0; i < defVector.size(); ++i) {
+                result[i] += defVector[i];
+            }
+        }
+
+        // Normalize the result vector
+        float norm = std::sqrt(std::inner_product(result.begin(), result.end(), result.begin(), 0.0f));
+        if (norm > 0) {
+            for (auto& val : result) {
+                val /= norm;
+            }
+        }
+
+        cachedVector = result;
+
+        return result;
+    }
+}
+
 namespace abstract {
 
-    AbstractSystem::AbstractSystem() : totalCommits(0) {
+    base::base() : totalCommits(0) {
     }
 
-    AbstractSystem::~AbstractSystem() {
+    base::~base() {
         clear();
     }
 
-    void AbstractSystem::processCommits(const std::vector<types::commit>& inputCommits) {
+    void base::processCommits(const std::vector<types::commit>& inputCommits) {
         clear();
         
         commits = inputCommits;
@@ -35,7 +69,7 @@ namespace abstract {
         calculateChronicPoints();
     }
 
-    void AbstractSystem::processCommit(const types::commit& commit, unsigned int timeIndex) {
+    void base::processCommit(const types::commit& commit, unsigned int timeIndex) {
         // Calculate connection weight for this commit
         float weight = calculateConnectionWeight(timeIndex, totalCommits);
         
@@ -54,14 +88,14 @@ namespace abstract {
         }
     }
 
-    void AbstractSystem::addDefinition(const std::string& symbol, unsigned int commitIndex, float weight) {
+    void base::addDefinition(const std::string& symbol, unsigned int commitIndex, float weight) {
         // Find or create the definition
         auto it = definitions.find(symbol);
         if (it == definitions.end()) {
             // Create new definition
             types::definition newDef;
             newDef.symbol = symbol;
-            newDef.occurrence = 0.0f;
+            newDef.CommitFrequency = 0.0f;
             newDef.chronicPoint = 0.0f;
             definitions[symbol] = newDef;
             it = definitions.find(symbol);
@@ -88,7 +122,7 @@ namespace abstract {
         }
     }
 
-    void AbstractSystem::calculateOccurrences() {
+    void base::calculateOccurrences() {
         if (totalCommits == 0) return;
         
         // Calculate the maximum possible weight (if a definition appeared in all commits)
@@ -105,11 +139,11 @@ namespace abstract {
             }
             
             // Normalize occurrence as a fraction of maximum possible weight
-            pair.second.occurrence = maxPossibleWeight > 0.0f ? (definitionWeight / maxPossibleWeight) : 0.0f;
+            pair.second.CommitFrequency = maxPossibleWeight > 0.0f ? (definitionWeight / maxPossibleWeight) : 0.0f;
         }
     }
 
-    void AbstractSystem::calculateChronicPoints() {
+    void base::calculateChronicPoints() {
         if (totalCommits == 0) return;
         
         for (auto& pair : definitions) {
@@ -134,7 +168,7 @@ namespace abstract {
         }
     }
 
-    float AbstractSystem::calculateConnectionWeight(unsigned int timeIndex, size_t numCommits) const {
+    float base::calculateConnectionWeight(unsigned int timeIndex, size_t numCommits) const {
         if (numCommits <= 1) return 1.0f;
         
         // Weight calculation: (timeIndex + 1) / numCommits
@@ -143,12 +177,12 @@ namespace abstract {
         return static_cast<float>(timeIndex + 1) / static_cast<float>(numCommits);
     }
 
-    size_t AbstractSystem::getTotalCommits() const {
+    size_t base::getTotalCommits() const {
         return totalCommits;
     }
 
-    AbstractSystem::AbstractStats AbstractSystem::getStatistics() const {
-        AbstractStats stats;
+    base::abstractStats base::getStatistics() const {
+        abstractStats stats;
         stats.totalDefinitions = definitions.size();
         stats.totalCommits = totalCommits;
         stats.totalConnections = 0;
@@ -158,7 +192,7 @@ namespace abstract {
         
         for (const auto& pair : definitions) {
             stats.totalConnections += pair.second.connections.size();
-            sumOccurrence += pair.second.occurrence;
+            sumOccurrence += pair.second.CommitFrequency;
             sumChronicPoint += pair.second.chronicPoint;
         }
         
@@ -172,14 +206,14 @@ namespace abstract {
         return stats;
     }
 
-    void AbstractSystem::clear() {
+    void base::clear() {
         definitions.clear();
         commits.clear();
         clusters.clear();
         totalCommits = 0;
     }
 
-    std::vector<float> AbstractSystem::getConnectionWeightsVector(const types::definition& definition) const {
+    std::vector<float> base::getConnectionWeightsVector(const types::definition& definition) const {
         std::vector<float> weights(totalCommits, 0.0f);
         
         for (const auto& connection : definition.connections) {
@@ -191,7 +225,7 @@ namespace abstract {
         return weights;
     }
 
-    float AbstractSystem::calculateCosineSimilarity(const types::definition& def1, const types::definition& def2) const {
+    float base::calculateCosineSimilarity(const types::definition& def1, const types::definition& def2) const {
         std::vector<float> weights1 = getConnectionWeightsVector(def1);
         std::vector<float> weights2 = getConnectionWeightsVector(def2);
         
@@ -223,7 +257,7 @@ namespace abstract {
         return dotProduct / (magnitude1 * magnitude2);
     }
 
-    std::vector<std::pair<std::string, types::definition>> AbstractSystem::getDefinitionsVector() const {
+    std::vector<std::pair<std::string, types::definition>> base::getDefinitionsVector() {
         std::vector<std::pair<std::string, types::definition>> result;
         result.reserve(definitions.size());
         
@@ -240,7 +274,7 @@ namespace abstract {
         return result;
     }
 
-    void AbstractSystem::cluster() {
+    void base::cluster() {
         // Clear existing clusters
         clusters.clear();
         
@@ -253,10 +287,14 @@ namespace abstract {
         chronicClustering();
 
         occurrenceClustering();
+
+        resonanceHubClustering();
+        
+        dissonanceHubClustering();
     }
 
     // Sorts definitions into a temporary list of indicies, where the list is sorted via the chronicPoint weight.
-    void AbstractSystem::chronicClustering() {
+    void base::chronicClustering() {
         std::vector<size_t> sortedIndicies = std::vector<size_t>(definitions.size());
 
         // First lets populate the normal indicies into the zeroed list.
@@ -278,7 +316,7 @@ namespace abstract {
         float averageChronicDistance = getAverageChronicRadius(sortedIndicies);
 
         // Now lets create the cluster.
-        types::cluster::chronic* currentCluster = new types::cluster::chronic();
+        types::cluster* currentCluster = new types::cluster(types::node::Type::CHRONIC);
 
         for (size_t i = 0; i < sortedIndicies.size() - 1; i++) {
             auto itA = definitions.begin();
@@ -295,10 +333,11 @@ namespace abstract {
                 }
 
                 // Start a new cluster
-                currentCluster = new types::cluster::chronic();
+                currentCluster = new types::cluster(types::node::Type::CHRONIC);
             }
             else {
                 // Add the definition to the current cluster
+                itA->second.ClusterFrequency++;
                 currentCluster->definitions.push_back(&itA->second);
 
                 if (currentCluster->radius < distance) {
@@ -306,12 +345,10 @@ namespace abstract {
                 }
             }
         }
-
-
     }
 
     // Basically same as the chronic clustering but for occurrences of definitions
-    void AbstractSystem::occurrenceClustering() {
+    void base::occurrenceClustering() {
         std::vector<size_t> sortedIndicies = std::vector<size_t>(definitions.size());
 
         // First lets populate the normal indicies into the zeroed list.
@@ -325,7 +362,7 @@ namespace abstract {
                 std::advance(itA, a);
                 auto itB = definitions.begin();
                 std::advance(itB, b);
-                return itA->second.occurrence < itB->second.occurrence;
+                return itA->second.CommitFrequency < itB->second.CommitFrequency;
             }
         );
 
@@ -333,7 +370,7 @@ namespace abstract {
         float averageOccurrenceDistance = getAverageOccurrenceRadius(sortedIndicies);
 
         // Now lets create the cluster.
-        types::cluster::occurrence* currentCluster = new types::cluster::occurrence();
+        types::cluster* currentCluster = new types::cluster(types::node::Type::OCCURRENCE);
 
         for (size_t i = 0; i < sortedIndicies.size() - 1; i++) {
             auto itA = definitions.begin();
@@ -341,7 +378,7 @@ namespace abstract {
             auto itB = definitions.begin();
             std::advance(itB, sortedIndicies[i + 1]);
 
-            float distance = std::abs(itA->second.occurrence - itB->second.occurrence);
+            float distance = std::abs(itA->second.CommitFrequency - itB->second.CommitFrequency);
 
             if (distance > averageOccurrenceDistance) {
                 // If the distance is greater than the threshold, finalize the current cluster
@@ -350,10 +387,11 @@ namespace abstract {
                 }
 
                 // Start a new cluster
-                currentCluster = new types::cluster::occurrence();
+                currentCluster = new types::cluster(types::node::Type::OCCURRENCE);
             }
             else {
                 // Add the definition to the current cluster
+                itA->second.ClusterFrequency++;
                 currentCluster->definitions.push_back(&itA->second);
 
                 if (currentCluster->radius < distance) {
@@ -363,12 +401,172 @@ namespace abstract {
         }
     }
     
-    const std::vector<types::cluster::base*>& AbstractSystem::getClusters() const {
+    // Basically the same as the chronic and occurrence clustering but for the clusters themselves
+    void base::dissonanceHubClustering() {
+        if (clusters.empty())
+            return;
+
+        std::vector<size_t> sortedIndicies = std::vector<size_t>(clusters.size());
+
+        // First lets populate the normal indicies into the zeroed list.
+        std::iota(sortedIndicies.begin(), sortedIndicies.end(), 0);
+
+        // Now lets sort the indicies based on the radius of clusters
+        std::sort(
+            sortedIndicies.begin(), sortedIndicies.end(), 
+            [this](size_t a, size_t b) {
+                auto itA = clusters.begin();
+                std::advance(itA, a);
+                auto itB = clusters.begin();
+                std::advance(itB, b);
+                return (*itA)->radius < (*itB)->radius;
+            }
+        );
+
+        float averageClusterRadius = getAverageClusterRadius(sortedIndicies);
+
+        // Now lets create the cluster.
+        types::cluster* currentCluster = new types::cluster(types::node::Type::DISSONANCE_HUB);
+
+        for (size_t i = 0; i < sortedIndicies.size() - 1; i++) {
+            auto itA = clusters.begin();
+            std::advance(itA, sortedIndicies[i]);
+            auto itB = clusters.begin();
+            std::advance(itB, sortedIndicies[i + 1]);
+
+            float distance = std::abs((*itA)->radius - (*itB)->radius);
+
+            if (distance > averageClusterRadius) {
+                // If the distance is greater than the threshold, finalize the current cluster
+                if (!currentCluster->definitions.empty()) {
+                    clusters.push_back(currentCluster);
+                }
+
+                // Start a new cluster
+                currentCluster = new types::cluster(types::node::Type::DISSONANCE_HUB);
+            }
+            else {
+                // Add the cluster to the current hub cluster
+                currentCluster->definitions.push_back(*itA);
+
+                if (currentCluster->radius < distance) {
+                    currentCluster->radius = distance; // Update the radius to the maximum distance found
+                }
+            }
+        }
+    }
+
+    void base::resonanceHubClustering() {
+        if (clusters.empty())
+            return;
+
+        std::vector<size_t> sortedIndicies = std::vector<size_t>(clusters.size());
+
+        // First lets populate the normal indicies into the zeroed list.
+        std::iota(sortedIndicies.begin(), sortedIndicies.end(), 0);
+
+        // Calculate average dot product similarity for each cluster based on its definitions
+        std::vector<float> averageClusterSimilarity(clusters.size(), 0.0f);
+        
+        for (size_t i = 0; i < clusters.size(); ++i) {
+            if (clusters[i]->definitions.empty()) {
+                averageClusterSimilarity[i] = 0.0f;
+                continue;
+            }
+
+            float totalSimilarity = 0.0f;
+            int validComparisons = 0;
+
+            // Calculate average dot product similarity within the cluster
+            for (size_t defA = 0; defA < clusters[i]->definitions.size(); ++defA) {
+
+                for (size_t defB = defA + 1; defB < clusters[i]->definitions.size(); ++defB) {
+
+                    std::vector<float> dotProductResult;
+                    float similarity = dotProduct(clusters[i]->definitions[defA], clusters[i]->definitions[defB], dotProductResult);
+                    totalSimilarity += similarity;
+                    validComparisons++;
+                }
+            }
+
+            averageClusterSimilarity[i] = validComparisons > 0 ? (totalSimilarity / validComparisons) : 0.0f;
+        }
+
+        // Sort indices based on average cluster similarity
+        std::sort(
+            sortedIndicies.begin(), sortedIndicies.end(), 
+            [&averageClusterSimilarity](size_t a, size_t b) {
+                return averageClusterSimilarity[a] < averageClusterSimilarity[b];
+            }
+        );
+
+        // Calculate average similarity threshold between consecutive clusters
+        float averageSimilarityThreshold = getAverageClusterSimilarityRadius(sortedIndicies, averageClusterSimilarity);
+
+        // Now lets create the hub cluster.
+        types::cluster* currentCluster = new types::cluster(types::node::Type::RESONANCE_HUB);
+
+        for (size_t i = 0; i < sortedIndicies.size() - 1; i++) {
+            size_t idxA = sortedIndicies[i];
+            size_t idxB = sortedIndicies[i + 1];
+
+            // Calculate distance between consecutive clusters based on their average similarities
+            float distance = std::abs(averageClusterSimilarity[idxA] - averageClusterSimilarity[idxB]);
+
+            if (distance > averageSimilarityThreshold) {
+                // If the distance is greater than the threshold, finalize the current cluster
+                if (!currentCluster->definitions.empty()) {
+                    clusters.push_back(currentCluster);
+                }
+
+                // Start a new cluster
+                currentCluster = new types::cluster(types::node::Type::RESONANCE_HUB);
+            }
+            else {
+                // Add the cluster to the current hub cluster
+                currentCluster->definitions.push_back(clusters[idxA]);
+
+                if (currentCluster->radius < distance) {
+                    currentCluster->radius = distance; // Update the radius to the maximum distance found
+                }
+            }
+        }
+
+        // Don't forget to add the last cluster if it has members
+        if (!currentCluster->definitions.empty()) {
+            clusters.push_back(currentCluster);
+        } else {
+            delete currentCluster; // Clean up if empty
+        }
+    }
+
+    // Compute dot product between a and b, with the floating point members use as vector values.
+    float base::dotProduct(types::node::base* a, types::node::base* b, std::vector<float>& result) {
+        // Clear the result vector and prepare it to store the component products
+        result.clear();
+        
+        std::vector<float> vectorA = a->getVector();
+        std::vector<float> vectorB = b->getVector();
+        
+        // Compute dot product: sum of component-wise products
+        float dotProduct = 0.0f;
+        result.reserve(vectorA.size());
+        
+        for (size_t i = 0; i < vectorA.size(); ++i) {
+            float componentProduct = vectorA[i] * vectorB[i];
+            result.push_back(componentProduct);
+            dotProduct += componentProduct;
+        }
+        
+        return dotProduct;
+    }
+
+    const std::vector<types::cluster*>& base::getClusters() {
         return clusters;
     }
     
-    std::vector<types::cluster::base*> AbstractSystem::getClustersByType(types::cluster::Type type) const {
-        std::vector<types::cluster::base*> result;
+    std::vector<types::cluster*> base::getClustersByType(types::node::Type type) {
+        std::vector<types::cluster*> result;
         for (const auto cluster : clusters) {
             if (cluster->type == type) {
                 result.push_back(cluster);
@@ -377,7 +575,7 @@ namespace abstract {
         return result;
     }
     
-    std::vector<std::vector<float>> AbstractSystem::buildSimilarityMatrix() const {
+    std::vector<std::vector<float>> base::buildSimilarityMatrix() {
         auto defsVector = getDefinitionsVector();
         size_t n = defsVector.size();
         std::vector<std::vector<float>> matrix(n, std::vector<float>(n, 0.0f));
@@ -394,7 +592,7 @@ namespace abstract {
         return matrix;
     }
 
-    float AbstractSystem::getAverageChronicRadius(const std::vector<size_t>& indicies) {
+    float base::getAverageChronicRadius(const std::vector<size_t>& indicies) {
         // Checks for each pair of i and i+1, and calculates their chronicPoint distance, returning the average of these distances.
         if (indicies.size() < 2) return 0.0f;
 
@@ -411,7 +609,7 @@ namespace abstract {
         return totalDistance / static_cast<float>(indicies.size() - 1);
     }
 
-    float AbstractSystem::getAverageOccurrenceRadius(const std::vector<size_t>& indicies) {
+    float base::getAverageOccurrenceRadius(const std::vector<size_t>& indicies) {
         // Checks for each pair of i and i+1, and calculates their occurrence distance, returning the average of these distances.
         if (indicies.size() < 2) return 0.0f;
 
@@ -423,23 +621,95 @@ namespace abstract {
             std::advance(itA, indicies[i]);
             auto itB = definitions.begin();
             std::advance(itB, indicies[i + 1]);
-            totalDistance += std::abs(itA->second.occurrence - itB->second.occurrence);
+            totalDistance += std::abs(itA->second.CommitFrequency - itB->second.CommitFrequency);
+        }
+
+        return totalDistance / static_cast<float>(indicies.size() - 1);
+    }
+
+    float base::getAverageClusterRadius(const std::vector<size_t>& indicies) {
+        if (indicies.size() < 2) return 0.0f;
+
+        float totalDistance = 0.0f;
+
+        // NOTE: Because, we already sort the indicies via occurrence, thus O(n^2) is not necessary.
+        for (size_t i = 0; i < indicies.size() - 1; ++i) {
+            auto itA = clusters.begin();
+            std::advance(itA, indicies[i]);
+            auto itB = clusters.begin();
+            std::advance(itB, indicies[i + 1]);
+            totalDistance += std::abs((*itA)->radius - (*itB)->radius);
+        }
+
+        return totalDistance / static_cast<float>(indicies.size() - 1);
+    }
+
+    float base::getAverageDotProductRadius(const std::vector<size_t>& indicies, std::vector<std::pair<std::string, types::definition>>& defsVector) {
+        // Calculates the average dot product distance between consecutive definitions in the sorted indices
+        if (indicies.size() < 2) return 0.0f;
+
+        float totalDistance = 0.0f;
+
+        for (size_t i = 0; i < indicies.size() - 1; ++i) {
+            size_t idxA = indicies[i];
+            size_t idxB = indicies[i + 1];
+
+            // Calculate dot product between the two definitions
+            std::vector<float> dotProductResult;
+            float dotProdA = 0.0f, dotProdB = 0.0f;
+            
+            // Calculate average dot product for each definition with all others
+            int validComparisons = 0;
+            for (size_t j = 0; j < defsVector.size(); ++j) {
+                if (j != idxA) {
+                    dotProdA += dotProduct(&defsVector[idxA].second, &defsVector[j].second, dotProductResult);
+                    validComparisons++;
+                }
+            }
+            if (validComparisons > 0) dotProdA /= validComparisons;
+
+            validComparisons = 0;
+            for (size_t j = 0; j < defsVector.size(); ++j) {
+                if (j != idxB) {
+                    dotProdB += dotProduct(&defsVector[idxB].second, &defsVector[j].second, dotProductResult);
+                    validComparisons++;
+                }
+            }
+            if (validComparisons > 0) dotProdB /= validComparisons;
+
+            totalDistance += std::abs(dotProdA - dotProdB);
+        }
+
+        return totalDistance / static_cast<float>(indicies.size() - 1);
+    }
+
+    float base::getAverageClusterSimilarityRadius(const std::vector<size_t>& indicies, const std::vector<float>& averageClusterSimilarity) {
+        // Calculates the average similarity distance between consecutive clusters in the sorted indices
+        if (indicies.size() < 2) return 0.0f;
+
+        float totalDistance = 0.0f;
+
+        for (size_t i = 0; i < indicies.size() - 1; ++i) {
+            size_t idxA = indicies[i];
+            size_t idxB = indicies[i + 1];
+
+            totalDistance += std::abs(averageClusterSimilarity[idxA] - averageClusterSimilarity[idxB]);
         }
 
         return totalDistance / static_cast<float>(indicies.size() - 1);
     }
 
     // Legacy methods for backward compatibility with tests
-    const std::unordered_map<std::string, types::definition>& AbstractSystem::getDefinitions() const {
+    const std::unordered_map<std::string, types::definition>& base::getDefinitions() const {
         return definitions;
     }
     
-    const types::definition* AbstractSystem::getDefinition(const std::string& symbol) const {
+    const types::definition* base::getDefinition(const std::string& symbol) const {
         auto it = definitions.find(symbol);
         return (it != definitions.end()) ? &it->second : nullptr;
     }
     
-    std::vector<types::definition> AbstractSystem::getDefinitionsByOccurrence() const {
+    std::vector<types::definition> base::getDefinitionsByOccurrence() {
         std::vector<std::pair<std::string, types::definition>> defsVec = getDefinitionsVector();
         std::vector<types::definition> result;
         
@@ -447,7 +717,7 @@ namespace abstract {
         std::sort(defsVec.begin(), defsVec.end(), 
                   [](const std::pair<std::string, types::definition>& a, 
                      const std::pair<std::string, types::definition>& b) {
-                      return a.second.occurrence > b.second.occurrence;
+                      return a.second.CommitFrequency > b.second.CommitFrequency;
                   });
         
         for (const auto& pair : defsVec) {
@@ -457,7 +727,7 @@ namespace abstract {
         return result;
     }
     
-    std::vector<types::definition> AbstractSystem::findTemporallyRelatedDefinitions(const std::string& symbol, float threshold) const {
+    std::vector<types::definition> base::findTemporallyRelatedDefinitions(const std::string& symbol, float threshold) const {
         std::vector<types::definition> result;
         auto it = definitions.find(symbol);
         if (it == definitions.end()) return result;
@@ -476,7 +746,7 @@ namespace abstract {
         return result;
     }
     
-    std::vector<types::definition> AbstractSystem::findCoOccurringDefinitions(const std::string& symbol, float threshold) const {
+    std::vector<types::definition> base::findCoOccurringDefinitions(const std::string& symbol, float threshold) const {
         std::vector<types::definition> result;
         auto it = definitions.find(symbol);
         if (it == definitions.end()) return result;
