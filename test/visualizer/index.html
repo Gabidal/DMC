@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DMC Interactive Visualizer</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>DMC Interactive Visualizer</h1>
+            <div class="controls">
+                <button id="load-data">Load Data</button>
+                <button id="center-view">Center View</button>
+                <select id="cluster-filter">
+                    <option value="all">All Clusters</option>
+                    <option value="chronic">Chronic</option>
+                    <option value="occurrence">Occurrence</option>
+                    <option value="dissonance_hub">Dissonance Hub</option>
+                    <option value="resonance_hub">Resonance Hub</option>
+                </select>
+            </div>
+        </header>
+        
+        <main>
+            <div id="visualization-container">
+                <svg id="graph"></svg>
+                <div id="tooltip" class="tooltip"></div>
+            </div>
+            
+            <aside id="sidebar">
+                <div id="info-panel">
+                    <h3>Node Information</h3>
+                    <div id="node-details">
+                        <p>Click on a node to see details</p>
+                    </div>
+                </div>
+                
+                <div id="stats-panel">
+                    <h3>Statistics</h3>
+                    <div id="stats-content">
+                        <div class="stat-item">
+                            <span class="stat-label">Total Nodes:</span>
+                            <span class="stat-value" id="total-nodes">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Total Edges:</span>
+                            <span class="stat-value" id="total-edges">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Total Clusters:</span>
+                            <span class="stat-value" id="total-clusters">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Visible Nodes:</span>
+                            <span class="stat-value" id="visible-nodes">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="cluster-panel">
+                    <h3>Clusters</h3>
+                    <div id="cluster-list"></div>
+                </div>
+            </aside>
+        </main>
+        
+        <div id="loading" class="loading hidden">
+            <div class="spinner"></div>
+            <p>Loading data...</p>
+        </div>
+    </div>
+
+    <script src="visualizer.js"></script>
+</body>
+</html>

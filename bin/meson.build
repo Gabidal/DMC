@@ -135,3 +135,12 @@ executable(
   cpp_args: cpp_args,          # C++ compiler flags
   link_args: link_args         # Linker flags
 )
+
+# Web Visualizer executable
+executable(
+  'visualizer',                # Visualizer executable name
+  ['../test/visualizer.cpp', '../src/abstract.cpp', '../src/filter.cpp', '../src/jsonParser.cpp'],
+  install : false,              # Don't install visualizer executable
+  cpp_args: cpp_args,          # C++ compiler flags
+  link_args: link_args         # Linker flags
+)

@@ -24,3 +24,4 @@ tester
 *.a
 *.tmp
 /test/data/*
+*.json
