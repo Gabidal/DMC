@@ -11,7 +11,7 @@
 namespace filter {
 
     /**
-     * Filter utility class to remove unnecessary words from commit definitions.
+     * Filter utility class to remove unnecessary words from summary definitions.
      * Removes common English stop words, programming keywords, and other noise
      * to focus on actual definition names like function names, class names, etc.
      */
@@ -58,14 +58,14 @@ namespace filter {
         static std::vector<std::string> filterDefinitions(const std::vector<std::string>& definitions);
         
         /**
-         * Filter definitions from a commit structure
+         * Filter definitions from a summary structure
          */
-        static void filterCommitDefinitions(types::commit& commit);
+        static void filterCommitDefinitions(types::summary& summary);
         
         /**
          * Filter definitions from multiple commits
          */
-        static void filterCommitDefinitions(std::vector<types::commit>& commits);
+        static void filterCommitDefinitions(std::vector<types::summary>& commits);
         
         /**
          * Get statistics about filtering (how many words were removed, etc.)

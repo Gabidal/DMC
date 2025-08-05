@@ -14,9 +14,17 @@ namespace types {
         if (!cachedVector.empty())
             return cachedVector;
 
+        // Handle empty clusters
+        if (definitions.empty()) {
+            cachedVector = {0, 0, 0};
+            return cachedVector;
+        }
+
         std::vector<float> result = {0, 0, 0};
 
         for (auto* def : definitions) {
+            if (def == nullptr) continue; // Skip null pointers
+            
             std::vector<float> defVector = def->getVector();
 
             if (defVector.size() != 3) {
@@ -41,6 +49,68 @@ namespace types {
 
         return result;
     }
+
+    float cluster::getVariance() {
+        // Var(V)= 1/N Sum(0->i)[||v i-q||^2]
+        // q is a centroid.
+        // Calculate variance within this cluster
+
+        if (definitions.empty()) {
+            return 0.0f;
+        }
+
+        // Pre-cache all definition vectors and determine vector size
+        std::vector<std::vector<float>> definitionVectors;
+        definitionVectors.reserve(definitions.size());
+        size_t vectorSize = 0;
+        
+        for (auto* def : definitions) {
+            if (def == nullptr) continue; // Skip null pointers
+            
+            std::vector<float> vec = def->getVector();
+            if (!vec.empty()) {
+                if (vectorSize == 0) {
+                    vectorSize = vec.size();
+                } else if (vec.size() != vectorSize) {
+                    continue; // Skip inconsistent vector sizes
+                }
+                definitionVectors.push_back(std::move(vec));
+            }
+        }
+        
+        if (definitionVectors.empty() || vectorSize == 0) {
+            return 0.0f;
+        }
+
+        // Calculate cluster centroid
+        std::vector<float> clusterCentroid(vectorSize, 0.0f);
+        
+        // Calculate centroid
+        for (const auto& vec : definitionVectors) {
+            for (size_t i = 0; i < vectorSize; ++i) {
+                clusterCentroid[i] += vec[i];
+            }
+        }
+        
+        float invValidDefs = 1.0f / static_cast<float>(definitionVectors.size());
+        for (size_t i = 0; i < vectorSize; ++i) {
+            clusterCentroid[i] *= invValidDefs;
+        }
+        
+        // Calculate variance within this cluster
+        float variance = 0.0f;
+        for (const auto& vec : definitionVectors) {
+            float squaredDistance = 0.0f;
+            for (size_t i = 0; i < vectorSize; ++i) {
+                float diff = vec[i] - clusterCentroid[i];
+                squaredDistance += diff * diff;
+            }
+            variance += squaredDistance;
+        }
+        variance *= invValidDefs;
+
+        return variance;
+    }
 }
 
 namespace abstract {
@@ -52,16 +122,24 @@ namespace abstract {
         clear();
     }
 
-    void base::processCommits(const std::vector<types::commit>& inputCommits) {
+    void base::processSummaries(const std::vector<types::json::parsable*>& inputSummaries) {
         clear();
         
-        commits = inputCommits;
-        totalCommits = commits.size();
+        // Convert parsable pointers to summary pointers with proper casting
+        summaries.clear();
+        summaries.reserve(inputSummaries.size());
+        for (auto* obj : inputSummaries) {
+            types::summary* summary = dynamic_cast<types::summary*>(obj);
+            if (summary) {
+                summaries.push_back(summary);
+            }
+        }
+        totalCommits = summaries.size();
         
-        // Set timeIndex for each commit and process them
-        for (size_t i = 0; i < commits.size(); ++i) {
-            commits[i].timeIndex = static_cast<unsigned int>(i);
-            processCommit(commits[i], commits[i].timeIndex);
+        // Set timeIndex for each summary and process them
+        for (size_t i = 0; i < summaries.size(); ++i) {
+            summaries[i]->timeIndex = static_cast<unsigned int>(i);
+            processCommit(summaries[i], summaries[i]->timeIndex);
         }
         
         // Calculate statistical data
@@ -69,19 +147,19 @@ namespace abstract {
         calculateChronicPoints();
     }
 
-    void base::processCommit(const types::commit& commit, unsigned int timeIndex) {
-        // Calculate connection weight for this commit
+    void base::processCommit(const types::summary* summary, unsigned int timeIndex) {
+        // Calculate connection weight for this summary
         float weight = calculateConnectionWeight(timeIndex, totalCommits);
         
         // Process ctag definitions
-        for (const std::string& symbol : commit.ctagDefinitions) {
+        for (const std::string& symbol : summary->ctagDefinitions) {
             if (!symbol.empty()) {
                 addDefinition(symbol, timeIndex, weight);
             }
         }
         
         // Process regex definitions
-        for (const std::string& symbol : commit.regexDefinitions) {
+        for (const std::string& symbol : summary->regexDefinitions) {
             if (!symbol.empty()) {
                 addDefinition(symbol, timeIndex, weight);
             }
@@ -101,12 +179,12 @@ namespace abstract {
             it = definitions.find(symbol);
         }
         
-        // Add connection to this commit
+        // Add connection to this summary
         types::connection conn;
         conn.Index = commitIndex;
         conn.weight = weight;
         
-        // Check if connection to this commit already exists
+        // Check if connection to this summary already exists
         bool connectionExists = false;
         for (auto& existingConn : it->second.connections) {
             if (existingConn.Index == commitIndex) {
@@ -172,13 +250,367 @@ namespace abstract {
         if (numCommits <= 1) return 1.0f;
         
         // Weight calculation: (timeIndex + 1) / numCommits
-        // This gives a range from 1/numCommits (first commit) to 1.0 (last commit)
+        // This gives a range from 1/numCommits (first summary) to 1.0 (last summary)
         // This ensures all commits get non-zero weights
         return static_cast<float>(timeIndex + 1) / static_cast<float>(numCommits);
     }
 
     size_t base::getTotalCommits() const {
         return totalCommits;
+    }
+
+    float base::getEntropy() {
+        // Based on: E[||v_i - v_j||^2]
+        // Runs the entropy calculation on definition listing only and then again for the clusters, returning the 1D vector of the gained anti-entropy gained via the clusters.
+        // result == 0.0f -> identical entropy between definitions and clusters
+        // result < 0.0f ->  clustering brings more entropy than anti-entropy.
+        // result > 0.0f -> clustering brings less entropy than anti-entropy.
+
+        if (definitions.empty()) {
+            return 0.0f;
+        }
+
+        // Pre-cache all definition vectors for performance
+        std::vector<std::vector<float>> definitionVectors;
+        definitionVectors.reserve(definitions.size());
+        size_t vectorSize = 0;
+        
+        for (auto& pair : definitions) {
+            std::vector<float> vec = pair.second.getVector();
+            if (!vec.empty()) {
+                if (vectorSize == 0) {
+                    vectorSize = vec.size();
+                } else if (vec.size() != vectorSize) {
+                    continue; // Skip inconsistent vector sizes
+                }
+                definitionVectors.push_back(std::move(vec));
+            }
+        }
+        
+        if (definitionVectors.empty()) {
+            return 0.0f;
+        }
+
+        // Calculate entropy for definitions - optimized with cached vectors
+        float definitionEntropy = 0.0f;
+        size_t defCount = 0;
+        
+        for (size_t i = 0; i < definitionVectors.size(); ++i) {
+            for (size_t j = i + 1; j < definitionVectors.size(); ++j) {
+                const auto& vec1 = definitionVectors[i];
+                const auto& vec2 = definitionVectors[j];
+                
+                // Calculate squared Euclidean distance ||v_i - v_j||^2 - inline for performance
+                float squaredDistance = 0.0f;
+                for (size_t k = 0; k < vectorSize; ++k) {
+                    float diff = vec1[k] - vec2[k];
+                    squaredDistance += diff * diff;
+                }
+                
+                definitionEntropy += squaredDistance;
+                defCount++;
+            }
+        }
+        
+        // Normalize by number of pairs
+        if (defCount > 0) {
+            definitionEntropy /= static_cast<float>(defCount);
+        }
+
+        // Calculate entropy for clusters - optimized with cached vectors
+        float clusterEntropy = 0.0f;
+        size_t clusterCount = 0;
+        
+        if (clusters.size() >= 2) {
+            // Pre-cache cluster vectors
+            std::vector<std::vector<float>> clusterVectors;
+            clusterVectors.reserve(clusters.size());
+            
+            for (auto* cluster : clusters) {
+                if (cluster != nullptr && !cluster->definitions.empty()) {
+                    std::vector<float> vec = cluster->getVector();
+                    if (vec.size() == vectorSize) {
+                        clusterVectors.push_back(std::move(vec));
+                    }
+                }
+            }
+            
+            // Calculate pairwise distances between clusters
+            for (size_t i = 0; i < clusterVectors.size(); ++i) {
+                for (size_t j = i + 1; j < clusterVectors.size(); ++j) {
+                    const auto& vec1 = clusterVectors[i];
+                    const auto& vec2 = clusterVectors[j];
+                    
+                    // Calculate squared Euclidean distance ||v_i - v_j||^2 - inline for performance
+                    float squaredDistance = 0.0f;
+                    for (size_t k = 0; k < vectorSize; ++k) {
+                        float diff = vec1[k] - vec2[k];
+                        squaredDistance += diff * diff;
+                    }
+                    
+                    clusterEntropy += squaredDistance;
+                    clusterCount++;
+                }
+            }
+            
+            // Normalize by number of pairs
+            if (clusterCount > 0) {
+                clusterEntropy /= static_cast<float>(clusterCount);
+            }
+        }
+
+        // Return the difference: positive means clustering reduces entropy (anti-entropy)
+        return definitionEntropy - clusterEntropy;
+    }
+
+    float base::getVariance() {
+        // Var(V)= 1/N Sum(0->i)[||v_i-q||^2]
+        // q is a centroid.
+        // Variance Gain = 1 - (clusterVariance / definitionVariance);
+
+        if (definitions.empty()) {
+            return 0.0f;
+        }
+
+        // Pre-cache all definition vectors and determine vector size
+        std::vector<std::vector<float>> definitionVectors;
+        definitionVectors.reserve(definitions.size());
+        size_t vectorSize = 0;
+        
+        for (auto& pair : definitions) {
+            std::vector<float> vec = pair.second.getVector();
+            if (!vec.empty()) {
+                if (vectorSize == 0) {
+                    vectorSize = vec.size();
+                } else if (vec.size() != vectorSize) {
+                    continue; // Skip inconsistent vector sizes
+                }
+                definitionVectors.push_back(std::move(vec));
+            }
+        }
+        
+        if (definitionVectors.empty() || vectorSize == 0) {
+            return 0.0f;
+        }
+
+        // Calculate definition centroid and variance in single pass
+        std::vector<float> definitionCentroid(vectorSize, 0.0f);
+        
+        // Calculate centroid
+        for (const auto& vec : definitionVectors) {
+            for (size_t i = 0; i < vectorSize; ++i) {
+                definitionCentroid[i] += vec[i];
+            }
+        }
+        
+        float invValidDefs = 1.0f / static_cast<float>(definitionVectors.size());
+        for (size_t i = 0; i < vectorSize; ++i) {
+            definitionCentroid[i] *= invValidDefs;
+        }
+        
+        // Calculate definition variance
+        float definitionVariance = 0.0f;
+        for (const auto& vec : definitionVectors) {
+            float squaredDistance = 0.0f;
+            for (size_t i = 0; i < vectorSize; ++i) {
+                float diff = vec[i] - definitionCentroid[i];
+                squaredDistance += diff * diff;
+            }
+            definitionVariance += squaredDistance;
+        }
+        definitionVariance *= invValidDefs;
+
+        // Calculate intra-cluster variance with cached cluster centroids
+        float intraVariance = 0.0f;
+        size_t totalPoints = 0;
+
+        for (auto* cluster : clusters) {
+            if (cluster == nullptr || cluster->definitions.empty()) {
+                continue;
+            }
+            
+            // Cache cluster centroid
+            std::vector<float> clusterCentroid = cluster->getVector();
+            if (clusterCentroid.size() != vectorSize) {
+                continue;
+            }
+            
+            // Process all definitions in this cluster
+            for (auto* def : cluster->definitions) {
+                std::vector<float> vec = def->getVector();
+                if (vec.size() == vectorSize) {
+                    float sqDist = 0.0f;
+                    for (size_t i = 0; i < vectorSize; ++i) {
+                        float diff = vec[i] - clusterCentroid[i];
+                        sqDist += diff * diff;
+                    }
+                    intraVariance += sqDist;
+                    totalPoints++;
+                }
+            }
+        }
+
+        if (totalPoints == 0) {
+            return 0.0f;
+        }
+        
+        intraVariance /= static_cast<float>(totalPoints);
+        
+        // Variance gain: 1 - (intra-cluster variance / overall variance)
+        if (definitionVariance == 0.0f) {
+            return intraVariance == 0.0f ? 0.0f : 1.0f;
+        }
+        
+        return 1.0f - (intraVariance / definitionVariance);
+    }
+
+    float base::getAverageClusterSize() {
+        if (clusters.empty()) {
+            return 0.0f;
+        }
+
+        // Single pass calculation
+        size_t totalDefinitions = 0;
+        size_t validClusters = 0;
+
+        for (auto* cluster : clusters) {
+            if (cluster != nullptr) {
+                totalDefinitions += cluster->definitions.size();
+                if (cluster->definitions.size() > 0) {  // Only count clusters with definitions
+                    validClusters++;
+                }
+            }
+        }
+
+        return validClusters > 0 ? static_cast<float>(totalDefinitions) / static_cast<float>(validClusters) : 0.0f;
+    }
+
+    float base::getSilhouetteScore() {
+        // s = (b - a) / max(a, b)
+        // where:
+        // a = mean intra-cluster distance
+        // b = mean nearest-cluster distance
+        
+        if (clusters.empty() || clusters.size() < 2) {
+            return 0.0f;  // Need at least 2 clusters for meaningful silhouette score
+        }
+
+        // Get the vector size from the first valid definition (all vectors should be same size)
+        size_t vectorSize = 0;
+        for (auto* cluster : clusters) {
+            if (cluster != nullptr && !cluster->definitions.empty()) {
+                for (auto* def : cluster->definitions) {
+                    std::vector<float> vec = def->getVector();
+                    if (!vec.empty()) {
+                        vectorSize = vec.size();
+                        break;
+                    }
+                }
+                if (vectorSize > 0) break;
+            }
+        }
+        
+        if (vectorSize == 0) {
+            return 0.0f;
+        }
+
+        // Pre-filter valid clusters and cache their vectors
+        std::vector<std::pair<types::cluster*, std::vector<std::vector<float>>>> validClusters;
+        validClusters.reserve(clusters.size());
+        
+        for (auto* cluster : clusters) {
+            if (cluster != nullptr && !cluster->definitions.empty()) {
+                std::vector<std::vector<float>> clusterVectors;
+                clusterVectors.reserve(cluster->definitions.size());
+                
+                for (auto* def : cluster->definitions) {
+                    std::vector<float> vec = def->getVector();
+                    if (vec.size() == vectorSize) {
+                        clusterVectors.push_back(std::move(vec));
+                    }
+                }
+                
+                if (!clusterVectors.empty()) {
+                    validClusters.emplace_back(cluster, std::move(clusterVectors));
+                }
+            }
+        }
+        
+        if (validClusters.size() < 2) {
+            return 0.0f;
+        }
+
+        float totalSilhouetteScore = 0.0f;
+        size_t totalPoints = 0;
+
+        // For each valid cluster
+        for (size_t clusterIdx = 0; clusterIdx < validClusters.size(); ++clusterIdx) {
+            const auto& currentClusterVectors = validClusters[clusterIdx].second;
+            
+            // For each point in the cluster
+            for (size_t pointIdx = 0; pointIdx < currentClusterVectors.size(); ++pointIdx) {
+                const auto& defVector = currentClusterVectors[pointIdx];
+
+                // Calculate mean intra-cluster distance (a) - optimized
+                float intraClusterDistance = 0.0f;
+                size_t intraCount = 0;
+                
+                for (size_t otherIdx = 0; otherIdx < currentClusterVectors.size(); ++otherIdx) {
+                    if (otherIdx != pointIdx) {
+                        const auto& otherVector = currentClusterVectors[otherIdx];
+                        
+                        // Inline distance calculation for better performance - dynamic size
+                        float distanceSquared = 0.0f;
+                        for (size_t i = 0; i < vectorSize; ++i) {
+                            float diff = defVector[i] - otherVector[i];
+                            distanceSquared += diff * diff;
+                        }
+                        intraClusterDistance += std::sqrt(distanceSquared);
+                        intraCount++;
+                    }
+                }
+                
+                float a = (intraCount > 0) ? (intraClusterDistance / static_cast<float>(intraCount)) : 0.0f;
+
+                // Calculate mean nearest-cluster distance (b) - optimized
+                float minInterClusterDistance = std::numeric_limits<float>::max();
+                
+                for (size_t otherClusterIdx = 0; otherClusterIdx < validClusters.size(); ++otherClusterIdx) {
+                    if (otherClusterIdx == clusterIdx) continue;
+                    
+                    const auto& otherClusterVectors = validClusters[otherClusterIdx].second;
+                    
+                    float interClusterDistance = 0.0f;
+                    size_t interCount = otherClusterVectors.size();
+                    
+                    for (const auto& otherVector : otherClusterVectors) {
+                        // Inline distance calculation for better performance - dynamic size
+                        float distanceSquared = 0.0f;
+                        for (size_t i = 0; i < vectorSize; ++i) {
+                            float diff = defVector[i] - otherVector[i];
+                            distanceSquared += diff * diff;
+                        }
+                        interClusterDistance += std::sqrt(distanceSquared);
+                    }
+                    
+                    float avgInterDistance = interClusterDistance / static_cast<float>(interCount);
+                    minInterClusterDistance = std::min(minInterClusterDistance, avgInterDistance);
+                }
+                
+                float b = (minInterClusterDistance != std::numeric_limits<float>::max()) ? minInterClusterDistance : 0.0f;
+
+                // Calculate silhouette score for this point: s = (b - a) / max(a, b)
+                float maxAB = std::max(a, b);
+                if (maxAB > 0.0f) {
+                    float silhouetteScore = (b - a) / maxAB;
+                    totalSilhouetteScore += silhouetteScore;
+                    totalPoints++;
+                }
+            }
+        }
+
+        // Return average silhouette score
+        return (totalPoints > 0) ? (totalSilhouetteScore / static_cast<float>(totalPoints)) : 0.0f;
     }
 
     base::abstractStats base::getStatistics() const {
@@ -208,7 +640,7 @@ namespace abstract {
 
     void base::clear() {
         definitions.clear();
-        commits.clear();
+        summaries.clear();
         clusters.clear();
         totalCommits = 0;
     }
@@ -291,6 +723,8 @@ namespace abstract {
         resonanceHubClustering();
         
         dissonanceHubClustering();
+
+        gradientDecent();   // Whole program optimization to find lower cost for each cluster and their threshold variance.
     }
 
     // Sorts definitions into a temporary list of indicies, where the list is sorted via the chronicPoint weight.
@@ -538,6 +972,11 @@ namespace abstract {
         } else {
             delete currentCluster; // Clean up if empty
         }
+    }
+
+    // Whole program optimization to find lower cost for each cluster and their threshold variance.
+    void base::gradientDecent() {
+        
     }
 
     // Compute dot product between a and b, with the floating point members use as vector values.

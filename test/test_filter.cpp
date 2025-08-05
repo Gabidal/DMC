@@ -133,12 +133,12 @@ namespace test_filter {
     }
 
     void testCommitFiltering() {
-        std::cout << "Testing commit structure filtering..." << std::endl;
+        std::cout << "Testing summary structure filtering..." << std::endl;
         
-        types::commit testCommit;
+        types::summary testCommit;
         testCommit.id = "test123";
-        testCommit.originalMessage = "Test commit";
-        testCommit.newMessage = "Filtered test commit";
+        testCommit.originalMessage = "Test summary";
+        testCommit.newMessage = "Filtered test summary";
         
         testCommit.ctagDefinitions = {
             "Guard::Shared",        // Keep

@@ -17,7 +17,7 @@
 class WebVisualizer {
 private:
     abstract::base abstractSystem;
-    std::vector<types::commit> commits;
+    std::vector<types::json::parsable*> commits;
     
     std::string generateVisualizationData() {
         std::ostringstream json;
@@ -44,17 +44,20 @@ public:
         std::cout << "Processing commit data from: " << filepath << "\n";
         
         // Parse commits
-        commits = jsonParser::FastJsonParser::parseFromFile(filepath);
+        commits = jsonParser::FastJsonParser::parseFromFile(filepath, types::json::type::SUMMARY);
         std::cout << "Parsed " << commits.size() << " commits\n";
         
         // Filter definitions
-        for (auto& commit : commits) {
-            commit.ctagDefinitions = filter::DefinitionFilter::filterDefinitions(commit.ctagDefinitions);
-            commit.regexDefinitions = filter::DefinitionFilter::filterDefinitions(commit.regexDefinitions);
+        for (auto& obj : commits) {
+            types::summary* commit = dynamic_cast<types::summary*>(obj);
+            if (commit) {
+                commit->ctagDefinitions = filter::DefinitionFilter::filterDefinitions(commit->ctagDefinitions);
+                commit->regexDefinitions = filter::DefinitionFilter::filterDefinitions(commit->regexDefinitions);
+            }
         }
         
         // Process through abstract system
-        abstractSystem.processCommits(commits);
+        abstractSystem.processSummaries(commits);
         abstractSystem.cluster();
         
         std::cout << "Generated " << abstractSystem.getClusters().size() << " clusters\n";

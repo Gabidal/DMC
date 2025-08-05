@@ -172,17 +172,17 @@ namespace filter {
         return filtered;
     }
 
-    void DefinitionFilter::filterCommitDefinitions(types::commit& commit) {
+    void DefinitionFilter::filterCommitDefinitions(types::summary& summary) {
         // Filter ctag definitions
-        commit.ctagDefinitions = filterDefinitions(commit.ctagDefinitions);
+        summary.ctagDefinitions = filterDefinitions(summary.ctagDefinitions);
         
         // Filter regex definitions (key_points)
-        commit.regexDefinitions = filterDefinitions(commit.regexDefinitions);
+        summary.regexDefinitions = filterDefinitions(summary.regexDefinitions);
     }
 
-    void DefinitionFilter::filterCommitDefinitions(std::vector<types::commit>& commits) {
-        for (types::commit& commit : commits) {
-            filterCommitDefinitions(commit);
+    void DefinitionFilter::filterCommitDefinitions(std::vector<types::summary>& commits) {
+        for (types::summary& summary : commits) {
+            filterCommitDefinitions(summary);
         }
     }
 

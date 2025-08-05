@@ -8,18 +8,18 @@
 
 namespace test_abstract {
 
-    // Helper function to create a test commit
-    types::commit createTestCommit(const std::string& id, 
+    // Helper function to create a test summary
+    types::summary* createTestCommit(const std::string& id, 
                                    const std::vector<std::string>& ctagDefs,
                                    const std::vector<std::string>& regexDefs = {}) {
-        types::commit commit;
-        commit.id = id;
-        commit.originalMessage = "Test commit " + id;
-        commit.newMessage = "Processed test commit " + id;
-        commit.ctagDefinitions = ctagDefs;
-        commit.regexDefinitions = regexDefs;
-        commit.timeIndex = 0; // Will be set by processCommits
-        return commit;
+        types::summary* summary = new types::summary();
+        summary->id = id;
+        summary->originalMessage = "Test summary " + id;
+        summary->newMessage = "Processed test summary " + id;
+        summary->ctagDefinitions = ctagDefs;
+        summary->regexDefinitions = regexDefs;
+        summary->timeIndex = 0; // Will be set by processCommits
+        return summary;
     }
 
     void testBasicAbstractSystemFunctionality() {
@@ -28,7 +28,7 @@ namespace test_abstract {
         abstract::base system;
         
         // Create test commits with overlapping definitions
-        std::vector<types::commit> commits;
+        std::vector<types::json::parsable*> commits;
         
         // Commit 1: Functions A, B, C
         commits.push_back(createTestCommit("commit1", {"FunctionA", "FunctionB", "FunctionC"}));
@@ -42,7 +42,7 @@ namespace test_abstract {
         // Commit 4: Functions D, E (D and E co-occur)
         commits.push_back(createTestCommit("commit4", {"FunctionD", "FunctionE"}));
         
-        system.processCommits(commits);
+        system.processSummaries(commits);
         
         // Test basic statistics
         auto stats = system.getStatistics();
@@ -62,10 +62,10 @@ namespace test_abstract {
         // Test connection weights vector
         auto weightsA = system.getConnectionWeightsVector(*defA);
         assert(weightsA.size() == 4); // Should have weights for all 4 commits
-        assert(weightsA[0] > 0.0f); // Should have weight in commit 0
-        assert(weightsA[1] > 0.0f); // Should have weight in commit 1
-        assert(weightsA[2] == 0.0f); // Should not have weight in commit 2
-        assert(weightsA[3] == 0.0f); // Should not have weight in commit 3
+        assert(weightsA[0] > 0.0f); // Should have weight in summary 0
+        assert(weightsA[1] > 0.0f); // Should have weight in summary 1
+        assert(weightsA[2] == 0.0f); // Should not have weight in summary 2
+        assert(weightsA[3] == 0.0f); // Should not have weight in summary 3
         std::cout << "  ✓ Connection weights vector correct" << std::endl;
         
         // Test cosine similarity
@@ -82,7 +82,7 @@ namespace test_abstract {
         abstract::base system;
         
         // Create test commits with clear clustering patterns
-        std::vector<types::commit> commits;
+        std::vector<types::json::parsable*> commits;
         
         // Group 1: Web-related functions (should cluster together)
         commits.push_back(createTestCommit("commit1", {"renderHTML", "parseCSS", "handleHTTPRequest"}));
@@ -98,7 +98,7 @@ namespace test_abstract {
         commits.push_back(createTestCommit("commit7", {"utilityFunction", "helperMethod"}));
         commits.push_back(createTestCommit("commit8", {"singletonFunction"}));
         
-        system.processCommits(commits);
+        system.processSummaries(commits);
         
         // Test that we have the expected number of definitions
         auto stats = system.getStatistics();
@@ -181,7 +181,7 @@ namespace test_abstract {
         abstract::base system;
         
         // Create simple test case with known relationships
-        std::vector<types::commit> commits;
+        std::vector<types::json::parsable*> commits;
         
         // Functions A and B always appear together
         commits.push_back(createTestCommit("commit1", {"FunctionA", "FunctionB"}));
@@ -190,7 +190,7 @@ namespace test_abstract {
         // Function C appears alone
         commits.push_back(createTestCommit("commit3", {"FunctionC"}));
         
-        system.processCommits(commits);
+        system.processSummaries(commits);
         
         // Get definitions for testing
         const auto* defA = system.getDefinition("FunctionA");
@@ -233,21 +233,21 @@ namespace test_abstract {
         std::cout << "  ✓ Empty system clustering handled correctly" << std::endl;
         
         // Test single definition
-        std::vector<types::commit> singleCommit;
+        std::vector<types::json::parsable*> singleCommit;
         singleCommit.push_back(createTestCommit("commit1", {"SingleFunction"}));
-        system.processCommits(singleCommit);
+        system.processSummaries(singleCommit);
         system.cluster();
         assert(system.getClusters().size() == 0); // Single definition can't form clusters
         std::cout << "  ✓ Single definition system handled correctly" << std::endl;
         
         // Test system with no connections (all definitions appear once in different commits)
         system.clear();
-        std::vector<types::commit> isolatedCommits;
+        std::vector<types::json::parsable*> isolatedCommits;
         isolatedCommits.push_back(createTestCommit("commit1", {"FunctionA"}));
         isolatedCommits.push_back(createTestCommit("commit2", {"FunctionB"}));
         isolatedCommits.push_back(createTestCommit("commit3", {"FunctionC"}));
         
-        system.processCommits(isolatedCommits);
+        system.processSummaries(isolatedCommits);
         system.cluster();
         
         // Should have few or no clusters since functions don't co-occur

@@ -6,28 +6,73 @@
 #include <limits>
 
 namespace types {
+    namespace json {
+        enum class type {
+            UNKNOWN,
+            SUMMARY,
+            COMMIT,
+            HUNK
+        };
+
+        class parsable {
+        public:
+            type Type = type::UNKNOWN;
+
+            parsable() = default;
+            parsable(type t) : Type(t) {}
+
+            virtual ~parsable() {}
+        };
+    }
+
+    class hunk : public json::parsable {
+    public:
+        std::string file;           // The file name
+        std::string changeType;     // The info of where it was addition, rename or modification
+        unsigned int oldStart;      // The line number of the old hunk
+        unsigned int oldLines;      // The number of lines the old hunk represents
+        unsigned int newStart;      // The line number of the new hunk
+        unsigned int newLines;      // The number of lines the new hunk represents
+        std::string oldText;        // The text of the old hunk
+        std::string newText;        // The text of the new hunk
+
+        hunk() : json::parsable(json::type::HUNK), oldStart(0), oldLines(0), newStart(0), newLines(0) {}
+    };
+
+    class commit : public json::parsable {
+    public:
+        std::string id;             // The commit hash
+        std::string message;        // The commit message
+
+        std::vector<hunk> hunks;    // The related hunks
+
+        commit() : json::parsable(json::type::COMMIT) {}
+    };
 
     // This is an representative of the data we get per entry from the FixCom output json
-    struct commit {
-        std::string id;                                 // The commit hash
-        std::string originalMessage;                    // The user written commit message
-        std::vector<std::string> hunkSummaries;         // Summaries of each of the hunk belonging to this commit
-        std::string newMessage;                         // The new FixCom generated commit message
+    class summary : public json::parsable {
+    public:
+        std::string id;                                 // The summary hash
+        std::string originalMessage;                    // The user written summary message
+        std::vector<std::string> hunkSummaries;         // Summaries of each of the hunk belonging to this summary
+        std::string newMessage;                         // The new FixCom generated summary message
         std::vector<std::string> ctagDefinitions;       // ctags exported symbols from the definitions
         std::vector<std::string> regexDefinitions;      // regex extracted symbols from the key_points
 
 
         // ---- DMC specifics ----
         unsigned int timeIndex;                         // Commits are added in time order, this is used to weight older commits higher.
+
+        summary() : json::parsable(json::type::SUMMARY), timeIndex(0) {}
     };
 
     struct connection {
-        unsigned int Index;         // Points to the index where the commit resides.
-        float weight;               // This is a normalized weight calculated via the number of commits and the timeIndex of the hosting commit. 
+        unsigned int Index;         // Points to the index where the summary resides.
+        float weight;               // This is a normalized weight calculated via the number of commits and the timeIndex of the hosting summary. 
 
-        void connect(commit& c) {
-            // Connect this connection to the provided commit
-            // The commit's timeIndex is used as the Index
+        void connect(summary& c) {
+            // Connect this connection to the provided summary
+            // The summary's timeIndex is used as the Index
             Index = c.timeIndex;
         }
     };
@@ -39,7 +84,8 @@ namespace types {
             CHRONIC,
             OCCURRENCE,
             DISSONANCE_HUB,     // Hub clusters, consisting of similar clusters with same radiuses representing the field radius, where larger radius represents more different definitions.
-            RESONANCE_HUB       // Hub clusters, consisting of similar definition vectors.
+            RESONANCE_HUB,       // Hub clusters, consisting of similar definition vectors.
+            FILE
         };
 
         class base {
@@ -77,7 +123,6 @@ namespace types {
 
         float CommitFrequency;      // from 0.0f to 1.0f, representing the normalized weight amount of this definition occurred in all of the commits.
         float ClusterFrequency;     // from 0.0f to 1.0f, representing the normalized weight amount of this definition occurred in all of the clusters.
-
         float chronicPoint; // from 0.0f to 1.0f, representing as a 1D vector, where this definition is most common in the order of commits in time axis.
 
         definition() : base(node::Type::DEFINITION) {}
@@ -158,6 +203,9 @@ namespace types {
         }
     
         std::vector<float> getVector() override;
+
+        // Used as an cost function
+        float getVariance();
     };
 }
 

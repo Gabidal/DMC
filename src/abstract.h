@@ -22,7 +22,7 @@ namespace abstract {
         std::unordered_map<std::string, types::definition> definitions;
         
         // Vector of all commits (ordered chronologically)
-        std::vector<types::commit> commits;
+        std::vector<types::summary*> summaries;
         
         // Total number of commits processed
         size_t totalCommits;
@@ -31,9 +31,9 @@ namespace abstract {
         std::vector<types::cluster*> clusters;
         
         /**
-         * Process a single commit and extract its definitions
+         * Process a single summary and extract its definitions
          */
-        void processCommit(const types::commit& commit, unsigned int timeIndex);
+        void processCommit(const types::summary* summary, unsigned int timeIndex);
         
         /**
          * Add or update a definition in the system
@@ -52,7 +52,7 @@ namespace abstract {
         void calculateChronicPoints();
         
         /**
-         * Calculate connection weights based on commit time and total commits
+         * Calculate connection weights based on summary time and total commits
          */
         float calculateConnectionWeight(unsigned int timeIndex, size_t totalCommits) const;
         
@@ -81,6 +81,10 @@ namespace abstract {
 
         void resonanceHubClustering();
 
+        // ----- Expectation-Maximization optimization for clustering -----
+
+        void gradientDecent();
+
         // ----- Clustering tools -----
     
         float dotProduct(types::node::base* a, types::node::base* b, std::vector<float>& result);
@@ -100,7 +104,7 @@ namespace abstract {
          * Process a vector of commits and build the abstract system
          * Commits should be in chronological order (oldest first)
          */
-        void processCommits(const std::vector<types::commit>& commits);
+        void processSummaries(const std::vector<types::json::parsable*>& commits);
         
         /**
          * Get statistics about the abstract system
@@ -141,6 +145,14 @@ namespace abstract {
          * Get the total number of processed commits
          */
         size_t getTotalCommits() const;
+
+        float getEntropy();
+
+        float getVariance();
+
+        float getAverageClusterSize();
+
+        float getSilhouetteScore();
         
         /**
          * Legacy methods needed for testing - to be removed in future versions
