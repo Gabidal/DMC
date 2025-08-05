@@ -5,6 +5,8 @@
 #include <vector>
 #include <limits>
 
+#include <algorithm>
+
 namespace types {
     namespace json {
         enum class type {
@@ -77,6 +79,16 @@ namespace types {
         }
     };
 
+    inline std::string getNormalSymbol(std::string raw) {
+        // First we'll remove all underscore characters
+        raw.erase(std::remove(raw.begin(), raw.end(), '_'), raw.end());
+
+        // Now we'll make all uppercase letters lowercase
+        std::transform(raw.begin(), raw.end(), raw.begin(), ::tolower);
+
+        return raw;
+    }
+
     namespace node {
         enum class Type {
             UNKNOWN,
@@ -85,7 +97,8 @@ namespace types {
             OCCURRENCE,
             DISSONANCE_HUB,     // Hub clusters, consisting of similar clusters with same radiuses representing the field radius, where larger radius represents more different definitions.
             RESONANCE_HUB,       // Hub clusters, consisting of similar definition vectors.
-            FILE
+            FILE,            // For physical connectivity
+            CONTEXT     // context nodes which contain namespace like member fetching of smaller features.
         };
 
         class base {
@@ -177,6 +190,8 @@ namespace types {
                     return "DISSONANCE_HUB";
                 case node::Type::RESONANCE_HUB:
                     return "RESONANCE_HUB";
+                case node::Type::CONTEXT:
+                    return "CONTEXT";
                 default:
                     return "UNKNOWN";
             }
@@ -206,6 +221,58 @@ namespace types {
 
         // Used as an cost function
         float getVariance();
+    };
+
+    class context : public cluster {
+    public:
+        std::string symbol;
+
+        context(const std::string& sym) : cluster(node::Type::CONTEXT), symbol(sym) {}
+
+        context* find(const std::string name) {
+            if (getNormalSymbol(symbol) == getNormalSymbol(name)) {
+                return this;
+            }
+            for (auto* def : definitions) {
+                if (def->type == node::Type::CONTEXT) {
+                    context* ctx = static_cast<context*>(def);
+                    context* found = ctx->find(name);
+                    if (found) {
+                        return found;
+                    }
+                }
+            }
+            return nullptr; // Not found
+        }
+
+        std::string getName() const override {
+            return symbol;
+        }
+
+        std::string getStats(unsigned int indent = 0) override {
+            std::string spaces(indent * 2, ' ');
+
+            std::string definitionsJson = "[\n";
+
+            for (size_t i = 0; i < definitions.size(); ++i) {
+                if (i > 0) definitionsJson += ",\n";
+                definitionsJson += definitions[i]->getStats(indent + 2);
+            }
+            definitionsJson += "\n" + spaces + "    " + "]";
+
+            return
+                spaces + "  {\n" +
+                spaces + "    \"symbol\": \"" + symbol + "\",\n" +
+                spaces + "    \"type\": \"CONTEXT\",\n" +
+                spaces + "    \"radius\": " + std::to_string(radius * upscaleRadius) + ",\n" +
+                spaces + "    \"vector\": " + getVectorAsString() + ",\n" +
+                spaces + "    \"definitions\": " + definitionsJson + "\n" +
+                spaces + "  }";
+        }
+
+        std::vector<float> getVector() override {
+            return cluster::getVector();
+        }
     };
 }
 

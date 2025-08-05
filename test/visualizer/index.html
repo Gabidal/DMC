@@ -12,6 +12,10 @@
         <header>
             <h1>DMC Interactive Visualizer</h1>
             <div class="controls">
+                <div class="search-container">
+                    <input type="text" id="node-search" placeholder="Search nodes..." autocomplete="off">
+                    <div id="search-results" class="search-results hidden"></div>
+                </div>
                 <button id="load-data">Load Data</button>
                 <button id="center-view">Center View</button>
                 <select id="cluster-filter">
@@ -20,6 +24,7 @@
                     <option value="occurrence">Occurrence</option>
                     <option value="dissonance_hub">Dissonance Hub</option>
                     <option value="resonance_hub">Resonance Hub</option>
+                    <option value="context">Context</option>
                 </select>
             </div>
         </header>

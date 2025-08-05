@@ -64,6 +64,11 @@ class DMCVisualizer {
         this.hasActiveHighlights = false;
         this.currentTooltipNode = null;
         
+        // Search functionality
+        this.searchResults = [];
+        this.selectedSearchIndex = -1;
+        this.searchCache = new Map();
+        
         this.setupEventListeners();
         this.loadData();
     }
@@ -146,8 +151,72 @@ class DMCVisualizer {
         document.getElementById('center-view').addEventListener('click', () => {
             this.centerView();
         });
+        
+        // Set up search functionality
+        this.setupSearchEventListeners();
     }
     
+    
+    /**
+     * @brief Set up search functionality event listeners
+     * 
+     * Configures event handlers for the search input, including real-time search,
+     * keyboard navigation, and result selection.
+     */
+    setupSearchEventListeners() {
+        const searchInput = document.getElementById('node-search');
+        const searchResults = document.getElementById('search-results');
+        
+        if (!searchInput || !searchResults) {
+            console.error('Search elements not found in DOM');
+            return;
+        }
+        
+        // Real-time search with debouncing
+        let searchTimeout;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                this.performSearch(e.target.value.trim());
+            }, 200);
+        });
+        
+        // Handle keyboard navigation
+        searchInput.addEventListener('keydown', (e) => {
+            switch (e.key) {
+                case 'ArrowDown':
+                    e.preventDefault();
+                    this.navigateSearchResults(1);
+                    break;
+                case 'ArrowUp':
+                    e.preventDefault();
+                    this.navigateSearchResults(-1);
+                    break;
+                case 'Enter':
+                    e.preventDefault();
+                    this.selectSearchResult();
+                    break;
+                case 'Escape':
+                    this.hideSearchResults();
+                    searchInput.blur();
+                    break;
+            }
+        });
+        
+        // Hide search results when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+                this.hideSearchResults();
+            }
+        });
+        
+        // Show search results when focusing the input (if there's content)
+        searchInput.addEventListener('focus', () => {
+            if (searchInput.value.trim() && this.searchResults.length > 0) {
+                this.showSearchResults();
+            }
+        });
+    }
     
     /**
      * @brief Cache frequently accessed DOM elements for performance optimization
@@ -265,6 +334,11 @@ class DMCVisualizer {
         this.edges = [];
         this.clusters = [];
         
+        // Clear search cache when new data is loaded
+        this.searchCache.clear();
+        this.searchResults = [];
+        this.selectedSearchIndex = -1;
+        
         // Initialize global counters for each cluster type
         this.clusterTypeCounters = {};
         
@@ -301,25 +375,33 @@ class DMCVisualizer {
             const clusterId = `cluster_${this.globalClusterIdCounter}`;
             this.globalClusterIdCounter++;
             
-            // Create a unique label using global counter for each cluster type
+            // Create a unique label - for CONTEXT clusters, use their symbol name
             const clusterType = (cluster.type || 'unknown').toUpperCase();
+            let uniqueLabel;
             
-            // Initialize counter for this cluster type if it doesn't exist
-            if (!this.clusterTypeCounters[clusterType]) {
-                this.clusterTypeCounters[clusterType] = 0;
+            if (clusterType === 'CONTEXT' && cluster.symbol) {
+                // For CONTEXT clusters, use the symbol name directly
+                uniqueLabel = cluster.symbol;
+            } else {
+                // For other cluster types, use the existing numbering system
+                // Initialize counter for this cluster type if it doesn't exist
+                if (!this.clusterTypeCounters[clusterType]) {
+                    this.clusterTypeCounters[clusterType] = 0;
+                }
+                
+                // Get unique index for this cluster type
+                const globalIndex = this.clusterTypeCounters[clusterType];
+                this.clusterTypeCounters[clusterType]++;
+                
+                uniqueLabel = `${clusterType}_${globalIndex}`;
             }
-            
-            // Get unique index for this cluster type
-            const globalIndex = this.clusterTypeCounters[clusterType];
-            this.clusterTypeCounters[clusterType]++;
-            
-            const uniqueLabel = `${clusterType}_${globalIndex}`;
             
             const clusterNode = {
                 id: clusterId,
                 label: uniqueLabel,
                 type: 'cluster',
                 clusterType: (cluster.type || 'unknown').toLowerCase(),
+                symbol: cluster.symbol || null, // Store the symbol for CONTEXT clusters
                 radius: cluster.radius || 0,
                 vector: cluster.vector || [0, 0, 0],
                 depth: depth,
@@ -336,8 +418,8 @@ class DMCVisualizer {
             // Process definitions in this cluster
             if (cluster.definitions && Array.isArray(cluster.definitions)) {
                 cluster.definitions.forEach((item, itemIndex) => {
-                    if (item.symbol) {
-                        // This is a definition
+                    if (item.symbol && !item.type) {
+                        // This is a definition (has symbol but no type field)
                         const defNode = {
                             id: item.symbol,
                             label: item.symbol,
@@ -378,8 +460,8 @@ class DMCVisualizer {
                             });
                         }
                         
-                    } else if (item.type && item.definitions) {
-                        // This is a sub-cluster
+                    } else if (item.type && (item.definitions || item.symbol)) {
+                        // This is a sub-cluster (including nested CONTEXT clusters)
                         this.processClusterHierarchy([item], clusterId, depth + 1);
                     } else {
                         console.warn('Unknown item type:', item);
@@ -673,7 +755,9 @@ class DMCVisualizer {
             let label = node.label || node.symbol || node.id;
             return label;
         } else if (node.type === 'cluster') {
-            // For clusters, show the unique label we created
+            // For clusters, show the appropriate label
+            // For CONTEXT clusters, this will be the symbol name
+            // For other clusters, this will be the generated label like "CHRONIC_0"
             return node.label || node.clusterType || node.id;
         } else {
             // Fallback for other node types
@@ -803,6 +887,7 @@ class DMCVisualizer {
                 <h3>Cluster Node</h3>
                 <div class="node-info"><strong>Cluster Type:</strong> ${node.clusterType}</div>
                 <div class="node-info"><strong>Label:</strong> ${node.label}</div>
+                ${node.symbol ? `<div class="node-info"><strong>Symbol:</strong> ${node.symbol}</div>` : ''}
                 <div class="node-info"><strong>ID:</strong> ${node.id}</div>
                 <div class="node-info"><strong>Radius:</strong> ${(node.radius || 0).toFixed(6)}</div>
                 <div class="node-info"><strong>Depth:</strong> ${node.depth}</div>
@@ -870,6 +955,9 @@ class DMCVisualizer {
             content += `Parent: ${node.parentCluster || 'None'}`;
         } else if (node.type === 'cluster') {
             content += `Cluster Type: ${node.clusterType}<br>`;
+            if (node.symbol) {
+                content += `Symbol: ${node.symbol}<br>`;
+            }
             content += `Radius: ${(node.radius || 0).toFixed(3)}<br>`;
             content += `Depth: ${node.depth}<br>`;
             content += `Parent: ${node.parentCluster || 'Root'}`;
@@ -1507,6 +1595,7 @@ class DMCVisualizer {
             
             clusterItem.innerHTML = `
                 ${hierarchyIndicator}<div class="cluster-title">${cluster.label} (${cluster.clusterType.toUpperCase()})</div>
+                ${cluster.symbol ? `<div class="cluster-info">Symbol: ${cluster.symbol}</div>` : ''}
                 <div class="cluster-info">Radius: ${(cluster.radius || 0).toFixed(4)}</div>
                 <div class="cluster-info">Definitions: ${definitionCount}</div>
                 <div class="cluster-info">Depth: ${cluster.depth}</div>
@@ -1639,6 +1728,268 @@ class DMCVisualizer {
                 loading.classList.add('hidden');
             }
         }
+    }
+
+    /**
+     * @brief Perform search for nodes based on the query string
+     * @param {string} query - The search query string
+     * 
+     * Searches through all nodes (clusters and definitions) for matches based on
+     * symbol names, labels, and IDs. Results are cached for performance.
+     */
+    performSearch(query) {
+        if (!query) {
+            this.hideSearchResults();
+            return;
+        }
+        
+        // Check cache first
+        if (this.searchCache.has(query)) {
+            this.searchResults = this.searchCache.get(query);
+            this.displaySearchResults();
+            return;
+        }
+        
+        // Perform the search
+        const lowerQuery = query.toLowerCase();
+        const results = [];
+        
+        this.nodes.forEach(node => {
+            let score = 0;
+            let matchType = '';
+            
+            // Search in symbol (for CONTEXT clusters and definitions)
+            if (node.symbol && node.symbol.toLowerCase().includes(lowerQuery)) {
+                score += node.symbol.toLowerCase().startsWith(lowerQuery) ? 100 : 50;
+                matchType = 'symbol';
+            }
+            
+            // Search in label
+            if (node.label && node.label.toLowerCase().includes(lowerQuery)) {
+                const labelScore = node.label.toLowerCase().startsWith(lowerQuery) ? 80 : 40;
+                if (labelScore > score) {
+                    score = labelScore;
+                    matchType = 'label';
+                }
+            }
+            
+            // Search in ID
+            if (node.id && node.id.toLowerCase().includes(lowerQuery)) {
+                const idScore = node.id.toLowerCase().startsWith(lowerQuery) ? 60 : 30;
+                if (idScore > score) {
+                    score = idScore;
+                    matchType = 'id';
+                }
+            }
+            
+            if (score > 0) {
+                results.push({
+                    node: node,
+                    score: score,
+                    matchType: matchType
+                });
+            }
+        });
+        
+        // Sort by score (highest first), then by type preference
+        results.sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            
+            // Prefer clusters over definitions when scores are equal
+            if (a.node.type === 'cluster' && b.node.type === 'definition') return -1;
+            if (a.node.type === 'definition' && b.node.type === 'cluster') return 1;
+            
+            return 0;
+        });
+        
+        // Limit results and cache them
+        this.searchResults = results.slice(0, 10);
+        this.searchCache.set(query, this.searchResults);
+        
+        this.displaySearchResults();
+    }
+    
+    /**
+     * @brief Display search results in the dropdown
+     * 
+     * Creates and displays the search results dropdown with formatted results
+     * including node information and highlighting.
+     */
+    displaySearchResults() {
+        const searchResultsDiv = document.getElementById('search-results');
+        if (!searchResultsDiv) return;
+        
+        if (this.searchResults.length === 0) {
+            searchResultsDiv.innerHTML = '<div class="no-results">No nodes found</div>';
+            this.showSearchResults();
+            return;
+        }
+        
+        let html = '';
+        this.searchResults.forEach((result, index) => {
+            const node = result.node;
+            const isSelected = index === this.selectedSearchIndex;
+            
+            // Create display name based on node type
+            let displayName = '';
+            let nodeInfo = '';
+            
+            if (node.type === 'cluster') {
+                displayName = node.symbol || node.label;
+                nodeInfo = `${node.clusterType.toUpperCase()} cluster`;
+                if (node.symbol && node.label !== node.symbol) {
+                    nodeInfo += ` (${node.label})`;
+                }
+            } else if (node.type === 'definition') {
+                displayName = node.symbol || node.label;
+                nodeInfo = `Definition (${node.connections || 0} connections)`;
+            }
+            
+            html += `
+                <div class="search-result-item ${isSelected ? 'selected' : ''}" data-index="${index}">
+                    <div class="search-result-title">${displayName}</div>
+                    <div class="search-result-info">${nodeInfo}</div>
+                </div>
+            `;
+        });
+        
+        searchResultsDiv.innerHTML = html;
+        
+        // Add click event listeners to result items
+        searchResultsDiv.querySelectorAll('.search-result-item').forEach((item, index) => {
+            item.addEventListener('click', () => {
+                this.selectedSearchIndex = index;
+                this.selectSearchResult();
+            });
+        });
+        
+        this.showSearchResults();
+    }
+    
+    /**
+     * @brief Navigate through search results using keyboard
+     * @param {number} direction - Direction to navigate (1 for down, -1 for up)
+     * 
+     * Handles keyboard navigation through search results with visual feedback.
+     */
+    navigateSearchResults(direction) {
+        if (this.searchResults.length === 0) return;
+        
+        this.selectedSearchIndex += direction;
+        
+        // Wrap around
+        if (this.selectedSearchIndex >= this.searchResults.length) {
+            this.selectedSearchIndex = 0;
+        } else if (this.selectedSearchIndex < 0) {
+            this.selectedSearchIndex = this.searchResults.length - 1;
+        }
+        
+        // Update visual selection
+        const searchResultsDiv = document.getElementById('search-results');
+        if (searchResultsDiv) {
+            searchResultsDiv.querySelectorAll('.search-result-item').forEach((item, index) => {
+                if (index === this.selectedSearchIndex) {
+                    item.classList.add('selected');
+                    item.scrollIntoView({ block: 'nearest' });
+                } else {
+                    item.classList.remove('selected');
+                }
+            });
+        }
+    }
+    
+    /**
+     * @brief Select the currently highlighted search result
+     * 
+     * Selects the search result, shows its sub-nodes, centers the view,
+     * and hides the search dropdown.
+     */
+    selectSearchResult() {
+        if (this.selectedSearchIndex < 0 || this.selectedSearchIndex >= this.searchResults.length) {
+            return;
+        }
+        
+        const selectedResult = this.searchResults[this.selectedSearchIndex];
+        const selectedNode = selectedResult.node;
+        
+        // Clear any existing highlights and filters
+        this.clearHighlights();
+        this.filterClusters('all'); // Reset any active filters
+        
+        // Select and highlight the node
+        this.selectNode(selectedNode);
+        
+        if (selectedNode.type === 'cluster') {
+            // For clusters, highlight the cluster and all its descendants
+            this.highlightClusterOnly(selectedNode);
+            
+            // Center view on the cluster and its content
+            this.centerOnCluster(selectedNode);
+        } else {
+            // For definitions, just highlight its connections
+            this.highlightConnections(selectedNode);
+            
+            // Center view on just this node
+            this.centerOnNode(selectedNode);
+        }
+        
+        // Hide search results and clear the search input
+        this.hideSearchResults();
+        const searchInput = document.getElementById('node-search');
+        if (searchInput) {
+            searchInput.value = '';
+            searchInput.blur();
+        }
+        
+        // Reset search state
+        this.selectedSearchIndex = -1;
+        this.searchResults = [];
+    }
+    
+    /**
+     * @brief Center the view on a specific node
+     * @param {Object} node - The node to center the view on
+     * 
+     * Centers the view on a single node with appropriate zoom level.
+     */
+    centerOnNode(node) {
+        if (!node || node.x === undefined || node.y === undefined) {
+            console.warn('Cannot center on node - invalid position');
+            return;
+        }
+        
+        const scale = 1.5; // Zoom level for single node
+        const translateX = this.width / 2 - scale * node.x;
+        const translateY = this.height / 2 - scale * node.y;
+        
+        this.svg.transition()
+            .duration(1000)
+            .ease(d3.easeQuadInOut)
+            .call(
+                this.zoom.transform,
+                d3.zoomIdentity.translate(translateX, translateY).scale(scale)
+            );
+    }
+    
+    /**
+     * @brief Show the search results dropdown
+     */
+    showSearchResults() {
+        const searchResults = document.getElementById('search-results');
+        if (searchResults) {
+            searchResults.classList.remove('hidden');
+        }
+    }
+    
+    /**
+     * @brief Hide the search results dropdown
+     */
+    hideSearchResults() {
+        const searchResults = document.getElementById('search-results');
+        if (searchResults) {
+            searchResults.classList.add('hidden');
+        }
+        this.selectedSearchIndex = -1;
     }
 
     /**

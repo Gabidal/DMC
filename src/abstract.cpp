@@ -716,6 +716,8 @@ namespace abstract {
         
         // Apply all clustering methods
 
+        namespaceClustering();
+
         lokiClustering();
 
         chronicClustering();
@@ -729,14 +731,67 @@ namespace abstract {
         gradientDecent();   // Whole program optimization to find lower cost for each cluster and their threshold variance.
     }
 
-    std::string getNormalSymbol(std::string raw) {
-        // First we'll remove all underscore characters
-        raw.erase(std::remove(raw.begin(), raw.end(), '_'), raw.end());
+    std::vector<std::string> slice(std::string input, std::vector<std::string> delimiters) {
+        std::vector<std::string> parts;
+        size_t start = 0;
 
-        // Now we'll make all uppercase letters lowercase
-        std::transform(raw.begin(), raw.end(), raw.begin(), ::tolower);
+        while (start < input.size()) {
+            size_t minPos = std::string::npos;
+            size_t delimLen = 0;
+            // Find the earliest occurrence of any delimiter
+            for (const auto& delim : delimiters) {
+                if (delim.empty()) continue;
+                size_t pos = input.find(delim, start);
+                if (pos != std::string::npos && (minPos == std::string::npos || pos < minPos)) {
+                    minPos = pos;
+                    delimLen = delim.length();
+                }
+            }
+            if (minPos == std::string::npos) {
+                parts.push_back(input.substr(start));
+                break;
+            } else {
+                parts.push_back(input.substr(start, minPos - start));
+                start = minPos + delimLen;
+            }
+        }
 
-        return raw;
+        return parts;
+    }
+
+    void base::namespaceClustering() {
+        for (auto& def : definitions) {
+
+            // Slice symbol
+            std::vector<std::string> parts = slice(def.first, {"::", ".", "->"});
+            if (parts.size() < 2) {
+                continue;
+            }
+
+            types::context* root = findContext(types::getNormalSymbol(parts.front()));
+            if (!root) {
+                root = new types::context(parts.front());
+                clusters.push_back(root);
+            }
+
+            for (size_t j = 1; j < parts.size() - 1; ++j) {
+                std::string currentName = parts[j];
+                types::context* next = root->find(currentName);
+
+                if (!next) {
+                    next = new types::context(currentName);
+                    root->definitions.push_back(next);
+                }
+
+                root = next;
+            }
+
+            root->definitions.push_back(&def.second);
+
+            // Now modify the symbol and reinsert
+            def.second.symbol = parts.back();
+            definitions[parts.back()] = def.second;
+        }
     }
 
     void base::lokiClustering() {
@@ -745,7 +800,7 @@ namespace abstract {
 
         // Now we'll go through the definitions and put them into the realted map via the normalSymbol function
         for (auto& pair : definitions) {
-            related[getNormalSymbol(pair.first)].push_back(&pair.second);
+            related[types::getNormalSymbol(pair.first)].push_back(&pair.second);
         }
 
         for (auto rel : related) {
@@ -1051,6 +1106,16 @@ namespace abstract {
 
     const std::vector<types::cluster*>& base::getClusters() {
         return clusters;
+    }
+
+    types::context* base::findContext(const std::string name) {
+        for (auto& cluster : clusters) {
+            if (cluster->type == types::node::Type::CONTEXT && types::getNormalSymbol(((types::context*)cluster)->symbol) == name) {
+                return static_cast<types::context*>(cluster);
+            }
+        }
+
+        return nullptr;
     }
     
     std::vector<types::cluster*> base::getClustersByType(types::node::Type type) {

@@ -73,6 +73,8 @@ namespace abstract {
 
         // ---- Clustering algorithms -----
 
+        void namespaceClustering();
+
         void lokiClustering();
 
         void chronicClustering();
@@ -90,6 +92,8 @@ namespace abstract {
         // ----- Clustering tools -----
     
         float dotProduct(types::node::base* a, types::node::base* b, std::vector<float>& result);
+
+        types::context* findContext(const std::string name);
 
     public:
         /**

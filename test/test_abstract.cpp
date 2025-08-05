@@ -133,6 +133,18 @@ namespace test_abstract {
                     case types::node::Type::CHRONIC:
                         std::cout << "CHRONIC";
                         break;
+                    case types::node::Type::OCCURRENCE:
+                        std::cout << "OCCURRENCE";
+                        break;
+                    case types::node::Type::DISSONANCE_HUB:
+                        std::cout << "DISSONANCE_HUB";
+                        break;
+                    case types::node::Type::RESONANCE_HUB:
+                        std::cout << "RESONANCE_HUB";
+                        break;
+                    case types::node::Type::CONTEXT:
+                        std::cout << "CONTEXT";
+                        break;
                     default:
                         std::cout << "UNKNOWN";
                         break;
