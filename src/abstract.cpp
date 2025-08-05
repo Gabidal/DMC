@@ -716,6 +716,8 @@ namespace abstract {
         
         // Apply all clustering methods
 
+        lokiClustering();
+
         chronicClustering();
 
         occurrenceClustering();
@@ -725,6 +727,53 @@ namespace abstract {
         dissonanceHubClustering();
 
         gradientDecent();   // Whole program optimization to find lower cost for each cluster and their threshold variance.
+    }
+
+    std::string getNormalSymbol(std::string raw) {
+        // First we'll remove all underscore characters
+        raw.erase(std::remove(raw.begin(), raw.end(), '_'), raw.end());
+
+        // Now we'll make all uppercase letters lowercase
+        std::transform(raw.begin(), raw.end(), raw.begin(), ::tolower);
+
+        return raw;
+    }
+
+    void base::lokiClustering() {
+        // Contains in chronological order of all definitions which contain similar name but in different naming conventions.
+        std::unordered_map<std::string, std::vector<types::definition*>> related;
+
+        // Now we'll go through the definitions and put them into the realted map via the normalSymbol function
+        for (auto& pair : definitions) {
+            related[getNormalSymbol(pair.first)].push_back(&pair.second);
+        }
+
+        for (auto rel : related) {
+            if (rel.second.size() < 2)
+                continue;
+
+            types::definition* inheritor = rel.second.back();   // The last added definition should be the newest occurrence of the definition.
+
+            for (size_t i = 0; i < rel.second.size() -1; i++) {
+
+                // Combine connections between the prior definitions
+                for (const auto& conn : rel.second[i]->connections) {
+                    // Add connection to the inheritor definition
+                    inheritor->connections.push_back(conn);
+                }
+            }
+        }
+
+        // Now we'll go through and remove from the original definitions listing all related on each related map but the last definition
+        for (auto& rel : related) {
+            if (rel.second.size() < 2)
+                continue;
+
+            // Keep the last definition, remove all others
+            for (size_t i = 0; i < rel.second.size() - 1; ++i) {
+                definitions.erase(rel.second[i]->symbol);
+            }
+        }
     }
 
     // Sorts definitions into a temporary list of indicies, where the list is sorted via the chronicPoint weight.

@@ -73,6 +73,8 @@ namespace abstract {
 
         // ---- Clustering algorithms -----
 
+        void lokiClustering();
+
         void chronicClustering();
 
         void occurrenceClustering();
