@@ -47,8 +47,11 @@ namespace types {
         std::string message;        // The commit message
 
         std::vector<hunk> hunks;    // The related hunks
-
-        commit() : json::parsable(json::type::COMMIT) {}
+        
+        // ----- DMC specifics -----
+        unsigned int summaryIndex;      // Index pointing to the summary index in abstract::base
+        
+        commit() : json::parsable(json::type::COMMIT), summaryIndex(0) {}
     };
 
     // This is an representative of the data we get per entry from the FixCom output json
@@ -63,7 +66,7 @@ namespace types {
 
 
         // ---- DMC specifics ----
-        unsigned int timeIndex;                         // Commits are added in time order, this is used to weight older commits higher.
+        unsigned int timeIndex;                         // summaries are added in time order, this is used to weight older summaries higher.
 
         summary() : json::parsable(json::type::SUMMARY), timeIndex(0) {}
     };
@@ -97,7 +100,6 @@ namespace types {
             OCCURRENCE,
             DISSONANCE_HUB,     // Hub clusters, consisting of similar clusters with same radiuses representing the field radius, where larger radius represents more different definitions.
             RESONANCE_HUB,       // Hub clusters, consisting of similar definition vectors.
-            FILE,            // For physical connectivity
             CONTEXT     // context nodes which contain namespace like member fetching of smaller features.
         };
 
@@ -138,7 +140,7 @@ namespace types {
         float ClusterFrequency;     // from 0.0f to 1.0f, representing the normalized weight amount of this definition occurred in all of the clusters.
         float chronicPoint; // from 0.0f to 1.0f, representing as a 1D vector, where this definition is most common in the order of commits in time axis.
 
-        definition() : base(node::Type::DEFINITION) {}
+        definition() : base(node::Type::DEFINITION), CommitFrequency(0.0f), ClusterFrequency(0.0f), chronicPoint(0.0f) {}
 
         std::string getName() const override {
             return symbol;

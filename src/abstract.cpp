@@ -115,7 +115,7 @@ namespace types {
 
 namespace abstract {
 
-    base::base() : totalCommits(0) {
+    base::base() : totalSummaries(0) {
     }
 
     base::~base() {
@@ -123,8 +123,6 @@ namespace abstract {
     }
 
     void base::processSummaries(const std::vector<types::json::parsable*>& inputSummaries) {
-        clear();
-        
         // Convert parsable pointers to summary pointers with proper casting
         summaries.clear();
         summaries.reserve(inputSummaries.size());
@@ -134,7 +132,7 @@ namespace abstract {
                 summaries.push_back(summary);
             }
         }
-        totalCommits = summaries.size();
+        totalSummaries = summaries.size();
         
         // Set timeIndex for each summary and process them
         for (size_t i = 0; i < summaries.size(); ++i) {
@@ -147,9 +145,25 @@ namespace abstract {
         calculateChronicPoints();
     }
 
+    void base::processCommits(const std::vector<types::json::parsable*>& inputCommits) {
+        commits.clear();
+        commits.reserve(inputCommits.size());
+
+        for (auto* obj : inputCommits) {
+            types::commit* commit = dynamic_cast<types::commit*>(obj);
+            if (commit) {
+                commits.push_back(commit);
+            }
+        }
+        totalCommits = commits.size();
+
+        calculateSummaryIndiciesForCommits();
+        calculateFileNodes();
+    }
+
     void base::processCommit(const types::summary* summary, unsigned int timeIndex) {
         // Calculate connection weight for this summary
-        float weight = calculateConnectionWeight(timeIndex, totalCommits);
+        float weight = calculateConnectionWeight(timeIndex, totalSummaries);
         
         // Process ctag definitions
         for (const std::string& symbol : summary->ctagDefinitions) {
@@ -201,12 +215,12 @@ namespace abstract {
     }
 
     void base::calculateOccurrences() {
-        if (totalCommits == 0) return;
+        if (totalSummaries == 0) return;
         
         // Calculate the maximum possible weight (if a definition appeared in all commits)
         float maxPossibleWeight = 0.0f;
-        for (unsigned int i = 0; i < totalCommits; ++i) {
-            maxPossibleWeight += calculateConnectionWeight(i, totalCommits);
+        for (unsigned int i = 0; i < totalSummaries; ++i) {
+            maxPossibleWeight += calculateConnectionWeight(i, totalSummaries);
         }
         
         // Calculate normalized occurrence for each definition
@@ -222,7 +236,7 @@ namespace abstract {
     }
 
     void base::calculateChronicPoints() {
-        if (totalCommits == 0) return;
+        if (totalSummaries == 0) return;
         
         for (auto& pair : definitions) {
             if (pair.second.connections.empty()) {
@@ -236,7 +250,7 @@ namespace abstract {
             
             for (const auto& conn : pair.second.connections) {
                 // Normalize time index to 0.0-1.0 range
-                float normalizedTime = static_cast<float>(conn.Index) / static_cast<float>(totalCommits - 1);
+                float normalizedTime = static_cast<float>(conn.Index) / static_cast<float>(totalSummaries - 1);
                 weightedSum += normalizedTime * conn.weight;
                 totalWeight += conn.weight;
             }
@@ -244,6 +258,55 @@ namespace abstract {
             // Calculate chronicPoint as weighted average
             pair.second.chronicPoint = totalWeight > 0.0f ? (weightedSum / totalWeight) : 0.0f;
         }
+    }
+
+    void base::calculateSummaryIndiciesForCommits() {
+        // First we'll go through the summaries, creating an quick hashmap with summary::id and then finding commits with the identical hash id
+        std::unordered_map<std::string, unsigned int> summaryIndexMap;
+
+        for (unsigned int i = 0; i < summaries.size(); ++i) {
+            summaryIndexMap[summaries[i]->id] = i;
+        }
+
+        // Now we can assign the summary index to each commit
+        for (auto& commit : commits) {
+            auto it = summaryIndexMap.find(commit->id);
+            if (it != summaryIndexMap.end()) {
+                commit->summaryIndex = it->second;
+            }
+        }
+    }
+
+    void base::calculateFileNodes() {
+        std::unordered_map<std::string, std::vector<types::commit*>> fileToCommits;
+
+        // First combine same file located commits.
+        for (auto c : commits) {
+            for (auto h : c->hunks) {
+                fileToCommits[h.file].push_back(c);
+            }
+        }
+
+        for (auto f : fileToCommits) {
+            types::definition fileDefinition;  // Create on stack instead of heap
+            fileDefinition.symbol = f.first;
+
+            for (auto commit : f.second) {
+                // Create commit connections via the summaryIndex in commits
+                types::connection conn;
+
+                conn.Index = commit->summaryIndex;
+                conn.weight = calculateConnectionWeight(commit->summaryIndex, totalSummaries);
+
+                fileDefinition.connections.push_back(conn);
+            }
+
+            definitions[fileDefinition.symbol] = fileDefinition; // Store the file definition in the definitions map
+        }
+
+        // Recalculate statistics for all definitions including the new file definitions
+        calculateOccurrences();
+        calculateChronicPoints();
     }
 
     float base::calculateConnectionWeight(unsigned int timeIndex, size_t numCommits) const {
@@ -256,7 +319,7 @@ namespace abstract {
     }
 
     size_t base::getTotalCommits() const {
-        return totalCommits;
+        return totalSummaries;
     }
 
     float base::getEntropy() {
@@ -616,7 +679,7 @@ namespace abstract {
     base::abstractStats base::getStatistics() const {
         abstractStats stats;
         stats.totalDefinitions = definitions.size();
-        stats.totalCommits = totalCommits;
+        stats.totalCommits = totalSummaries;
         stats.totalConnections = 0;
         
         float sumOccurrence = 0.0f;
@@ -642,14 +705,14 @@ namespace abstract {
         definitions.clear();
         summaries.clear();
         clusters.clear();
-        totalCommits = 0;
+        totalSummaries = 0;
     }
 
     std::vector<float> base::getConnectionWeightsVector(const types::definition& definition) const {
-        std::vector<float> weights(totalCommits, 0.0f);
+        std::vector<float> weights(totalSummaries, 0.0f);
         
         for (const auto& connection : definition.connections) {
-            if (connection.Index < totalCommits) {
+            if (connection.Index < totalSummaries) {
                 weights[connection.Index] = connection.weight;
             }
         }
@@ -763,7 +826,7 @@ namespace abstract {
         for (auto& def : definitions) {
 
             // Slice symbol
-            std::vector<std::string> parts = slice(def.first, {"::", ".", "->"});
+            std::vector<std::string> parts = slice(def.first, {"::", "/"});
             if (parts.size() < 2) {
                 continue;
             }
@@ -776,6 +839,10 @@ namespace abstract {
 
             for (size_t j = 1; j < parts.size() - 1; ++j) {
                 std::string currentName = parts[j];
+
+                if (currentName == root->symbol)
+                    continue;
+
                 types::context* next = root->find(currentName);
 
                 if (!next) {

@@ -13,14 +13,15 @@ int main() {
         std::cout << "DMC\n";
         std::cout << "=====================\n\n";
         
-        const std::string filepath = "test/data/commit_summaries.json";
+        const std::string summariesFilepath = "test/data/commit_summaries.json";
+        const std::string CommitsFilepath = "test/data/commit_data.json";
         
-        std::cout << "Parsing summary summaries from: " << filepath << "\n";
+        std::cout << "Parsing summary summaries from: " << summariesFilepath << "\n";
         
         // Measure parsing time
         auto start = std::chrono::high_resolution_clock::now();
         
-        std::vector<types::json::parsable*> summaries = jsonParser::FastJsonParser::parseFromFile(filepath, types::json::type::SUMMARY);
+        std::vector<types::json::parsable*> summaries = jsonParser::FastJsonParser::parseFromFile(summariesFilepath, types::json::type::SUMMARY);
         
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
@@ -57,6 +58,10 @@ int main() {
         // Now we'll feed the combed commits into the abstract
         abstract::base abstractSystem;
         abstractSystem.processSummaries(summaries);
+
+        std::vector<types::json::parsable*> commits = jsonParser::FastJsonParser::parseFromFile(CommitsFilepath, types::json::type::COMMIT);
+
+        abstractSystem.processCommits(commits);
 
         abstract::base::abstractStats stats = abstractSystem.getStatistics();
 

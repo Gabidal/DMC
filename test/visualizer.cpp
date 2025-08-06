@@ -17,6 +17,7 @@
 class WebVisualizer {
 private:
     abstract::base abstractSystem;
+    std::vector<types::json::parsable*> summaries;
     std::vector<types::json::parsable*> commits;
     
     std::string generateVisualizationData() {
@@ -40,15 +41,19 @@ private:
     }
     
 public:
-    void processData(const std::string& filepath) {
-        std::cout << "Processing commit data from: " << filepath << "\n";
+    void processData(const std::string& summaryPath, const std::string& commitPath) {
+        std::cout << "Processing commit data from: " << summaryPath << "\n";
+        
+        // Parse summaries
+        summaries = jsonParser::FastJsonParser::parseFromFile(summaryPath, types::json::type::SUMMARY);
+        std::cout << "Parsed " << summaries.size() << " summaries\n";
         
         // Parse commits
-        commits = jsonParser::FastJsonParser::parseFromFile(filepath, types::json::type::SUMMARY);
+        commits = jsonParser::FastJsonParser::parseFromFile(commitPath, types::json::type::COMMIT);
         std::cout << "Parsed " << commits.size() << " commits\n";
-        
+
         // Filter definitions
-        for (auto& obj : commits) {
+        for (auto& obj : summaries) {
             types::summary* commit = dynamic_cast<types::summary*>(obj);
             if (commit) {
                 commit->ctagDefinitions = filter::DefinitionFilter::filterDefinitions(commit->ctagDefinitions);
@@ -57,7 +62,8 @@ public:
         }
         
         // Process through abstract system
-        abstractSystem.processSummaries(commits);
+        abstractSystem.processCommits(commits);
+        abstractSystem.processSummaries(summaries);
         abstractSystem.cluster();
         
         std::cout << "Generated " << abstractSystem.getClusters().size() << " clusters\n";
@@ -96,12 +102,13 @@ int main(int argc, char* argv[]) {
         std::cout << "DMC Web Visualizer\n";
         std::cout << "==================\n\n";
         
-        std::string inputPath = "test/data/commit_summaries.json";
+        std::string inputSummariesPath = "test/data/commit_summaries.json";
+        std::string inputCommitPath = "test/data/commit_data.json";
         std::string outputPath = "test/visualizer/data.json";
         
         // Parse command line arguments
         if (argc > 1) {
-            inputPath = argv[1];
+            inputSummariesPath = argv[1];
         }
         if (argc > 2) {
             outputPath = argv[2];
@@ -111,7 +118,7 @@ int main(int argc, char* argv[]) {
         
         // Process the data
         auto start = std::chrono::high_resolution_clock::now();
-        visualizer.processData(inputPath);
+        visualizer.processData(inputSummariesPath, inputCommitPath);
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
         

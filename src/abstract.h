@@ -21,8 +21,14 @@ namespace abstract {
         // Map from definition symbol to definition object
         std::unordered_map<std::string, types::definition> definitions;
         
-        // Vector of all commits (ordered chronologically)
+        // Vector of all summaries (ordered chronologically)
         std::vector<types::summary*> summaries;
+        
+        // Vector of all commits (ordered chronologically)
+        std::vector<types::commit*> commits;
+        
+        // Total number of summaries processed
+        size_t totalSummaries;
         
         // Total number of commits processed
         size_t totalCommits;
@@ -40,6 +46,8 @@ namespace abstract {
          */
         void addDefinition(const std::string& symbol, unsigned int commitIndex, float weight);
         
+        // ----- Data processing -----
+
         /**
          * Calculate normalized occurrence values for all definitions
          */
@@ -50,6 +58,10 @@ namespace abstract {
          * ChronicPoint represents the normalized temporal center of mass for each definition
          */
         void calculateChronicPoints();
+
+        void calculateSummaryIndiciesForCommits();
+
+        void calculateFileNodes();
         
         /**
          * Calculate connection weights based on summary time and total commits
@@ -110,7 +122,9 @@ namespace abstract {
          * Process a vector of commits and build the abstract system
          * Commits should be in chronological order (oldest first)
          */
-        void processSummaries(const std::vector<types::json::parsable*>& commits);
+        void processSummaries(const std::vector<types::json::parsable*>& summaries);
+
+        void processCommits(const std::vector<types::json::parsable*>& commits);
         
         /**
          * Get statistics about the abstract system
