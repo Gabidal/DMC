@@ -422,7 +422,20 @@ std::string unescapeString(const std::string& str) {
         }
     }
     
-    return result;
+    // Filter Windows-style line endings (\r\n) and replace with Unix-style (\n)
+    std::string filtered;
+    filtered.reserve(result.length());
+    
+    for (size_t i = 0; i < result.length(); ++i) {
+        if (result[i] == '\r' && i + 1 < result.length() && result[i + 1] == '\n') {
+            // Skip the \r and let the \n be added in the next iteration
+            continue;
+        } else {
+            filtered += result[i];
+        }
+    }
+    
+    return filtered;
 }
 
 bool isValidJson(const std::string& data, types::json::type t) {

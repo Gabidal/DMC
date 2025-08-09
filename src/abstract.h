@@ -59,6 +59,9 @@ namespace abstract {
          */
         void calculateChronicPoints();
 
+        /**
+         * This is done to connect the commits and summaries, since summary count is not always the same as commit count, since some commits are not important to keep track of.
+         */
         void calculateSummaryIndiciesForCommits();
 
         void calculateFileNodes();

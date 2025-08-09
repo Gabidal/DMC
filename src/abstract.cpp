@@ -279,12 +279,50 @@ namespace abstract {
 
     void base::calculateFileNodes() {
         std::unordered_map<std::string, std::vector<types::commit*>> fileToCommits;
+        std::vector<std::string> markForRemoval;
 
         // First combine same file located commits.
         for (auto c : commits) {
             for (auto h : c->hunks) {
                 fileToCommits[h.file].push_back(c);
             }
+        }
+
+        // Now we'll combine files where they have been renamed, this can be found when in a commit one hunk is on file_status "deleted" and other one is "added", and the old_text of the removes is the same as the new_text of the added one
+        for (auto& commit : commits) {
+            std::vector<types::hunk*> removed;
+            std::vector<types::hunk*> added;
+
+            for (auto& hunk : commit->hunks) {
+                if (hunk.changeType == "deleted") {
+                    removed.push_back(&hunk);
+                } else if (hunk.changeType == "added") {
+                    added.push_back(&hunk);
+                }
+            }
+
+            for (size_t r = 0; r < removed.size(); r++) {
+                for (size_t a = 0; a < added.size(); a++) {
+                    // If we found an removed and an added hunk in the same commit, we should check if they are basically the same file, just renamed.
+                    if (removed[r]->oldStart == added[a]->newStart && removed[r]->oldLines == added[a]->newLines) { // We cant really compare the actual file contents, since if the file has been renamed, it's include file names have also probably been renamed.
+                        // Now we can add the commits of the oldFile to the newFile commits and then remove the oldFile from the map
+                        fileToCommits[added[a]->file].insert(fileToCommits[added[a]->file].end(), fileToCommits[removed[r]->file].begin(), fileToCommits[removed[r]->file].end());
+                        
+                        markForRemoval.push_back(removed[r]->file); // Mark the old file for removal
+        
+                        // now we remove the added indicies
+                        added.erase(added.begin() + a);
+                        // We do not need to remove the removed list indicies, since we wont go through them again.
+                        
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Now remove the marked files from the map
+        for (const auto& file : markForRemoval) {
+            fileToCommits.erase(file);
         }
 
         for (auto f : fileToCommits) {
