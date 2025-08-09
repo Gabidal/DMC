@@ -26,6 +26,9 @@ namespace abstract {
         
         // Vector of all commits (ordered chronologically)
         std::vector<types::commit*> commits;
+
+        // An intermediate holder of files and their definitive connections to their commits
+        std::vector<types::definition> files;
         
         // Total number of summaries processed
         size_t totalSummaries;
@@ -39,7 +42,7 @@ namespace abstract {
         /**
          * Process a single summary and extract its definitions
          */
-        void processCommit(const types::summary* summary, unsigned int timeIndex);
+        void processSummary(const types::summary* summary, unsigned int timeIndex);
         
         /**
          * Add or update a definition in the system
@@ -99,6 +102,8 @@ namespace abstract {
         void dissonanceHubClustering();
 
         void resonanceHubClustering();
+
+        void fileClustering();
 
         // ----- Expectation-Maximization optimization for clustering -----
 

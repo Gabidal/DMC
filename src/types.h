@@ -100,7 +100,7 @@ namespace types {
             OCCURRENCE,
             DISSONANCE_HUB,     // Hub clusters, consisting of similar clusters with same radiuses representing the field radius, where larger radius represents more different definitions.
             RESONANCE_HUB,       // Hub clusters, consisting of similar definition vectors.
-            CONTEXT     // context nodes which contain namespace like member fetching of smaller features.
+            CONTEXT,    // context nodes which contain namespace like member fetching of smaller features.
         };
 
         class base {
@@ -136,11 +136,16 @@ namespace types {
 
         std::vector<connection> connections;    // Single definition can be present in multiple different commits, where the newer commits have more impact on said definition and its use.
 
+        std::vector<size_t> referenced;     // Contains file indicies where this definition has been referenced in.
+
+        std::vector<std::string> history;   // Contains in chronological order of the different aliases this definition has had through the commit history.
+
         float CommitFrequency;      // from 0.0f to 1.0f, representing the normalized weight amount of this definition occurred in all of the commits.
         float ClusterFrequency;     // from 0.0f to 1.0f, representing the normalized weight amount of this definition occurred in all of the clusters.
-        float chronicPoint; // from 0.0f to 1.0f, representing as a 1D vector, where this definition is most common in the order of commits in time axis.
+        float chronicPoint;         // from 0.0f to 1.0f, representing as a 1D vector, where this definition is most common in the order of commits in time axis.
+        float fileVector;           // from 0.0f to 1.0f, representing as a 1D vector, pointing to the file index and its surrounding files.
 
-        definition() : base(node::Type::DEFINITION), CommitFrequency(0.0f), ClusterFrequency(0.0f), chronicPoint(0.0f) {}
+        definition() : base(node::Type::DEFINITION), CommitFrequency(0.0f), ClusterFrequency(0.0f), chronicPoint(0.0f), fileVector(0.0f) {}
 
         std::string getName() const override {
             return symbol;
@@ -160,7 +165,8 @@ namespace types {
             return {
                 CommitFrequency,
                 ClusterFrequency,
-                chronicPoint
+                chronicPoint,
+                fileVector
             };
         }
     };

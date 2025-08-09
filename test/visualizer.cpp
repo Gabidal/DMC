@@ -62,8 +62,8 @@ public:
         }
         
         // Process through abstract system
-        abstractSystem.processCommits(commits);
         abstractSystem.processSummaries(summaries);
+        abstractSystem.processCommits(commits);
         abstractSystem.cluster();
         
         std::cout << "Generated " << abstractSystem.getClusters().size() << " clusters\n";

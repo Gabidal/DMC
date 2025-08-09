@@ -16,19 +16,19 @@ namespace types {
 
         // Handle empty clusters
         if (definitions.empty()) {
-            cachedVector = {0, 0, 0};
+            cachedVector = {0, 0, 0, 0};
             return cachedVector;
         }
 
-        std::vector<float> result = {0, 0, 0};
+        std::vector<float> result = {0, 0, 0, 0};
 
         for (auto* def : definitions) {
             if (def == nullptr) continue; // Skip null pointers
             
             std::vector<float> defVector = def->getVector();
 
-            if (defVector.size() != 3) {
-                std::cerr << "Error: Definition vector size is not 3!" << std::endl;
+            if (defVector.size() != 4) {
+                std::cerr << "Error: Definition vector size is not 4!" << std::endl;
                 continue;
             }
             
@@ -137,7 +137,7 @@ namespace abstract {
         // Set timeIndex for each summary and process them
         for (size_t i = 0; i < summaries.size(); ++i) {
             summaries[i]->timeIndex = static_cast<unsigned int>(i);
-            processCommit(summaries[i], summaries[i]->timeIndex);
+            processSummary(summaries[i], summaries[i]->timeIndex);
         }
         
         // Calculate statistical data
@@ -161,7 +161,7 @@ namespace abstract {
         calculateFileNodes();
     }
 
-    void base::processCommit(const types::summary* summary, unsigned int timeIndex) {
+    void base::processSummary(const types::summary* summary, unsigned int timeIndex) {
         // Calculate connection weight for this summary
         float weight = calculateConnectionWeight(timeIndex, totalSummaries);
         
@@ -280,6 +280,7 @@ namespace abstract {
     void base::calculateFileNodes() {
         std::unordered_map<std::string, std::vector<types::commit*>> fileToCommits;
         std::vector<std::string> markForRemoval;
+        std::unordered_map<std::string, std::vector<std::string>> renameHistory;
 
         // First combine same file located commits.
         for (auto c : commits) {
@@ -310,6 +311,8 @@ namespace abstract {
                         
                         markForRemoval.push_back(removed[r]->file); // Mark the old file for removal
         
+                        renameHistory[added[a]->file].push_back(removed[r]->file); // Add the rename history for the new file
+
                         // now we remove the added indicies
                         added.erase(added.begin() + a);
                         // We do not need to remove the removed list indicies, since we wont go through them again.
@@ -329,6 +332,9 @@ namespace abstract {
             types::definition fileDefinition;  // Create on stack instead of heap
             fileDefinition.symbol = f.first;
 
+            // Add the history renames
+            fileDefinition.history = renameHistory[f.first];
+
             for (auto commit : f.second) {
                 // Create commit connections via the summaryIndex in commits
                 types::connection conn;
@@ -339,7 +345,7 @@ namespace abstract {
                 fileDefinition.connections.push_back(conn);
             }
 
-            definitions[fileDefinition.symbol] = fileDefinition; // Store the file definition in the definitions map
+            files.push_back(fileDefinition);
         }
 
         // Recalculate statistics for all definitions including the new file definitions
@@ -829,6 +835,8 @@ namespace abstract {
         
         dissonanceHubClustering();
 
+        fileClustering();
+
         gradientDecent();   // Whole program optimization to find lower cost for each cluster and their threshold variance.
     }
 
@@ -915,6 +923,7 @@ namespace abstract {
             types::definition* inheritor = rel.second.back();   // The last added definition should be the newest occurrence of the definition.
 
             for (size_t i = 0; i < rel.second.size() -1; i++) {
+                inheritor->history.push_back(rel.second[i]->symbol); // Add the prior definition to the history of the inheritor
 
                 // Combine connections between the prior definitions
                 for (const auto& conn : rel.second[i]->connections) {
@@ -1181,6 +1190,126 @@ namespace abstract {
         } else {
             delete currentCluster; // Clean up if empty
         }
+    }
+
+    /**
+     * For us to get file vectors, we first need to do prior steps:
+     *  - Create clusters for each file containing all definitions which are from the commits related to the file clusters
+     *  - Order the files list to represent the closeness to each file, where two files which have similar definitions would appear next to each other in the files listing.
+     *  - Then go through the definitions and calculate their file vector to point to the most occurring files and any deviation would still hold to closeby related files.
+     */
+    void base::fileClustering() {
+        if (files.empty() || definitions.empty()) {
+            return;
+        }
+
+        // Step 1: Create file clusters and gather definitions from related commits
+        std::unordered_map<std::string, std::vector<types::node::base*>> fileToDefinitions;
+        
+        // For each file, find definitions that are related through commits
+        for (auto& file : files) {
+            for (auto& connection : file.connections) {
+                // Find all definitions that appear in the same commit as this file
+                for (auto& defPair : definitions) {
+                    for (auto& defConnection : defPair.second.connections) {
+                        if (defConnection.Index == connection.Index) {
+                            fileToDefinitions[file.symbol].push_back(&defPair.second);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Step 2: Calculate similarity between files based on shared definitions
+        std::vector<float> averageFileSimilarity(files.size(), 0.0f);
+        
+        for (size_t i = 0; i < files.size(); ++i) {
+            const auto& fileA = files[i];
+            float totalSimilarity = 0.0f;
+            int validComparisons = 0;
+            
+            for (size_t j = 0; j < files.size(); ++j) {
+                if (i == j) continue;
+                
+                const auto& fileB = files[j];
+                
+                // Calculate file similarity based on cosine similarity of their connection patterns
+                float similarity = calculateCosineSimilarity(fileA, fileB);
+                totalSimilarity += similarity;
+                validComparisons++;
+            }
+            
+            averageFileSimilarity[i] = validComparisons > 0 ? (totalSimilarity / validComparisons) : 0.0f;
+        }
+
+        // Step 3: Sort files by their average similarity to create ordered clusters
+        std::vector<size_t> fileIndices(files.size());
+        std::iota(fileIndices.begin(), fileIndices.end(), 0);
+        
+        std::sort(
+            fileIndices.begin(), fileIndices.end(),
+            [&averageFileSimilarity](size_t a, size_t b) {
+                return averageFileSimilarity[a] < averageFileSimilarity[b];
+            }
+        );
+        
+        // Reorder files based on sorted indices
+        std::vector<types::definition> sortedFiles;
+        sortedFiles.reserve(files.size());
+        for (size_t idx : fileIndices) {
+            sortedFiles.push_back(files[idx]);
+        }
+        files = std::move(sortedFiles);
+
+        // Step 4: Create file clusters, and add definitions to them
+        // Use a map to track which file indices have been added to each definition
+        std::unordered_map<types::definition*, std::unordered_set<size_t>> definitionFileIndices;
+        
+        for (auto defs : fileToDefinitions) {
+            types::context* currentCluster = new types::context(defs.first);
+
+            currentCluster->definitions = std::move(defs.second);
+
+            // Get this file's own index
+            size_t fileIndex = 0;
+
+            for (size_t i = 0; i < files.size(); ++i) {
+                if (files[i].symbol == defs.first) {
+                    fileIndex = i;
+                    break;
+                }
+            }
+
+            // cache where the definition occurred (only if not already added)
+            for (auto* def : currentCluster->definitions) {
+                types::definition* typedDef = (types::definition*)def;
+                if (definitionFileIndices[typedDef].find(fileIndex) == definitionFileIndices[typedDef].end()) {
+                    typedDef->referenced.push_back(fileIndex);
+                    definitionFileIndices[typedDef].insert(fileIndex);
+                }
+            }
+        }
+
+        // Now we can go through the definitions and calculate their normalized file index
+        for (auto& def : definitions) {
+            types::definition* tmp = &def.second;
+
+            for (auto& ref : tmp->referenced) {
+                tmp->fileVector += (float)ref;
+            }
+
+            if (!tmp->referenced.empty()) {
+                // Calculate average file index, then normalize to [0.0, 1.0] range
+                tmp->fileVector /= static_cast<float>(tmp->referenced.size()); // Average file index
+                if (files.size() > 1) {
+                    tmp->fileVector /= static_cast<float>(files.size() - 1); // Normalize to [0.0, 1.0]
+                }
+            } else {
+                tmp->fileVector = 0.0f; // No references, set to zero
+            }
+        }
+
     }
 
     // Whole program optimization to find lower cost for each cluster and their threshold variance.
